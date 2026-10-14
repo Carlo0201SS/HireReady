@@ -1,0 +1,22 @@
+# Core & LLM
+openai>=1.0.0
+requests
+PyYAML
+pydantic
+
+# Document Processing (CV)
+PyMuPDF
+python-docx
+
+# Anonymization (Rizzo-PII)
+transformers
+torch
+torchvision  # Dipendenza per transformers
+huggingface_hub
+
+# UI
+streamlit
+
+# Report Generation
+weasyprint
+Jinja2

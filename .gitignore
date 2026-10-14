@@ -1,0 +1,38 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Byte-compiled / cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Test e coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config locale (se contiene percorsi o token specifici della tua macchina)
+config.yaml
+
+# Modelli scaricati in locale
+/models/
+
+# Log e output locali
+logs/
+*.log
+
+# Report generati in locale
+*.pdf
+!src/infrastructure/report/templates/**/*.pdf
