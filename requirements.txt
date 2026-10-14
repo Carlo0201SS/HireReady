@@ -10,7 +10,9 @@ python-docx
 
 # Anonymization (Rizzo-PII)
 transformers
-torch  # Dipendenza per transformers
+torch
+torchvision  # Dipendenza per transformers
+huggingface_hub
 
 # UI
 streamlit

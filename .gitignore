@@ -26,6 +26,9 @@ Thumbs.db
 # Config locale (se contiene percorsi o token specifici della tua macchina)
 config.yaml
 
+# Modelli scaricati in locale
+/models/
+
 # Log e output locali
 logs/
 *.log
