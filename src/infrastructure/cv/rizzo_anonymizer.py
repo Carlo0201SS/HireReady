@@ -80,6 +80,10 @@ URL_PATTERN = re.compile(
 	r"(?i)(?:https?://)?(?:www\.)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
 	r"(?:\.[a-z0-9-]+)+(?:/[^\s<>\"'`()\[\]{}]*)?"
 )
+YEAR_PATTERN = re.compile(r"\s*(?:19\d{2}|20(?:[0-2]\d|30))(?:\s*[-–—/]\s*(?:19\d{2}|20(?:[0-2]\d|30)))*\s*")
+IGNORED_ENTITY_LABELS = frozenset(
+	{"ZIP", "ZIP_CODE", "ZIPCODE", "POSTAL_CODE", "POSTALCODE", "POSTCODE"}
+)
 
 
 class RizzoAnonymizer:
@@ -120,38 +124,45 @@ class RizzoAnonymizer:
 				continue
 			if any(start < github_end and end > github_start for github_start, github_end in github_spans):
 				continue
+			if YEAR_PATTERN.fullmatch(text[start:end]):
+				continue
 
 			label = self._normalize_label(
 				str(entity.get("entity_group") or entity.get("entity") or "PII")
 			)
+			if label in IGNORED_ENTITY_LABELS:
+				continue
 			redactions.append((start, end, label))
 
 		for label, pattern, minimum_digits in REDACTION_POLICY["text_patterns"]:
 			for match in pattern.finditer(text):
 				start = match.start("number") if "number" in match.groupdict() else match.start()
 				end = match.end("number") if "number" in match.groupdict() else match.end()
+				if YEAR_PATTERN.fullmatch(text[start:end]):
+					continue
 				if label == "PHONE":
 					digit_count = sum(character.isdigit() for character in text[start:end])
 					if digit_count < minimum_digits or digit_count > 15:
 						continue
 				redactions.append((start, end, label))
 
+		return self._apply_redactions(text, redactions)
+
+	@staticmethod
+	def _apply_redactions(text: str, redactions: list[tuple[int, int, str]]) -> str:
 		selected_redactions = []
 		last_end = -1
 		for start, end, label in sorted(
 			redactions,
 			key=lambda item: (item[0], -(item[1] - item[0]), item[2]),
 		):
-			if start < last_end:
-				continue
-			selected_redactions.append((start, end, label))
-			last_end = end
+			if start >= last_end:
+				selected_redactions.append((start, end, label))
+				last_end = end
 
-		redacted_text = text
 		for start, end, label in reversed(selected_redactions):
-			redacted_text = f"{redacted_text[:start]}[{label}]{redacted_text[end:]}"
-
-		return redacted_text
+			text = f"{text[:start]}[{label}]{text[end:]}"
+		return text
 
 	@staticmethod
 	def _normalize_label(label: str) -> str:

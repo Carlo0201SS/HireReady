@@ -72,6 +72,33 @@ class RizzoAnonymizerTests(unittest.TestCase):
 
 		self.assertEqual(result, "[LOCATION], [LOCATION], [COMPANY]")
 
+	def test_ignores_zip_code_entities(self):
+		text = "Anni: 1999-2022-2023-2000; fuori intervallo: 1899, 2031"
+		values = ("1999-2022-2023-2000", "1899", "2031")
+		entities = [
+			{
+				"start": text.index(value),
+				"end": text.index(value) + len(value),
+				"entity_group": "ZIP_CODE",
+			}
+			for value in values
+		]
+		anonymizer = RizzoAnonymizer()
+
+		with patch.object(anonymizer, "_get_pipeline", return_value=Mock(return_value=entities)):
+			result = anonymizer.anonymize(text)
+
+		self.assertEqual(result, text)
+
+	def test_year_sequences_are_not_detected_as_phone_numbers(self):
+		text = "Anni: 1999-2022-2023"
+		anonymizer = RizzoAnonymizer()
+
+		with patch.object(anonymizer, "_get_pipeline", return_value=Mock(return_value=[])):
+			result = anonymizer.anonymize(text)
+
+		self.assertEqual(result, text)
+
 
 if __name__ == "__main__":
 	unittest.main()

@@ -17,14 +17,7 @@ extracted_text = st.session_state.get("extracted_cv_text", "")
 if uploaded_file is not None:
 	try:
 		file_bytes = uploaded_file.getvalue()
-<<<<<<< Updated upstream
-		if Path(uploaded_file.name).suffix.lower() == ".docx":
-			extracted_text = DocxExtractor().extract_text_from_bytes(file_bytes)
-		elif Path(uploaded_file.name).suffix.lower() == ".pdf":
-			extracted_text = PyMuPDFExtractor().extract_text_from_bytes(file_bytes)
-=======
 		extracted_text = extract_cv_text(uploaded_file.name, file_bytes)
->>>>>>> Stashed changes
 	except Exception:
 		extracted_text = ""
 		st.session_state["extracted_cv_text"] = ""
