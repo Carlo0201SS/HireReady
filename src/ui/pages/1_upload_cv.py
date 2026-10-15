@@ -16,7 +16,7 @@ if uploaded_file is not None:
 		file_bytes = uploaded_file.getvalue()
 		if Path(uploaded_file.name).suffix.lower() == ".docx":
 			extracted_text = DocxExtractor().extract_text_from_bytes(file_bytes)
-		else:
+		elif Path(uploaded_file.name).suffix.lower() == ".pdf":
 			extracted_text = PyMuPDFExtractor().extract_text_from_bytes(file_bytes)
 	except Exception:
 		st.error("Impossibile leggere il documento. Verifica che sia valido e non protetto da password.")
