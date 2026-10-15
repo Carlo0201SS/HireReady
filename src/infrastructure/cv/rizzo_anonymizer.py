@@ -87,6 +87,10 @@ class RizzoAnonymizer:
 		self.model_dir = Path(model_dir).expanduser().resolve()
 		self._pipeline = None
 
+	@property
+	def is_available(self) -> bool:
+		return (self.model_dir / "config.json").is_file()
+
 	def anonymize(self, text: str) -> str:
 		if not text.strip():
 			return text

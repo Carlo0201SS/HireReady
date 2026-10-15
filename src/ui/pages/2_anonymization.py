@@ -1,11 +1,6 @@
 import streamlit as st
 
-from src.infrastructure.cv.rizzo_anonymizer import DEFAULT_MODEL_DIR, RizzoAnonymizer
-
-
-@st.cache_resource
-def get_anonymizer() -> RizzoAnonymizer:
-	return RizzoAnonymizer()
+from src.backend import anonymize_cv, is_anonymization_available
 
 
 st.title("Anonimizzazione del CV")
@@ -16,7 +11,7 @@ if not source_text:
 	st.page_link("src/ui/pages/1_upload_cv.py", label="Vai al caricamento del CV")
 	st.stop()
 
-model_available = (DEFAULT_MODEL_DIR / "config.json").is_file()
+model_available = is_anonymization_available()
 if not model_available:
 	st.warning("Il modello Rizzo PII non è ancora presente in locale.")
 	st.code(
@@ -28,7 +23,7 @@ if not model_available:
 if st.button("Anonimizza CV", type="primary", disabled=not model_available):
 	with st.spinner("Analisi e anonimizzazione in corso..."):
 		try:
-			anonymized_text = get_anonymizer().anonymize(source_text)
+			anonymized_text = anonymize_cv(source_text)
 		except Exception:
 			st.error("Anonimizzazione non riuscita. Verifica il modello locale e riprova.")
 		else:
