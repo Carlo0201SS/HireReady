@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from src.domain.ports.cv_extractor import CVExtractor
+from backend.domain.ports.cv_extractor import CVExtractor
 
 
 class CVExtractionService:

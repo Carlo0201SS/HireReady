@@ -1,10 +1,10 @@
 from functools import lru_cache
 
-from src.application.anonymization_service import AnonymizationService
-from src.application.cv_extraction_service import CVExtractionService
-from src.infrastructure.cv.docx_extractor import DocxExtractor
-from src.infrastructure.cv.pymupdf_extractor import PyMuPDFExtractor
-from src.infrastructure.cv.rizzo_anonymizer import RizzoAnonymizer
+from backend.application.anonymization_service import AnonymizationService
+from backend.application.cv_extraction_service import CVExtractionService
+from backend.infrastructure.cv.docx_extractor import DocxExtractor
+from backend.infrastructure.cv.pymupdf_extractor import PyMuPDFExtractor
+from backend.infrastructure.cv.rizzo_anonymizer import RizzoAnonymizer
 
 
 @lru_cache(maxsize=1) # memorizza il risultato della funzione.

@@ -12,6 +12,7 @@ class PyMuPDFExtractor:
 		with pymupdf.open(path) as document:
 			return self._extract_document(document)
 
+	# al momento del caricamento, il file viene letto in bytes.
 	def extract_text_from_bytes(self, pdf_bytes: bytes) -> str:
 		with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
 			return self._extract_document(document)

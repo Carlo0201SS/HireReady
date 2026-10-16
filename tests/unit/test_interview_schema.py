@@ -2,7 +2,7 @@ import unittest
 
 from pydantic import ValidationError
 
-from src.domain.models.interview import InterviewStartTurn, InterviewTurn
+from backend.domain.models.interview import InterviewStartTurn, InterviewTurn
 
 
 START_TURN = {

@@ -1,4 +1,4 @@
-from src.domain.ports.anonymizer import Anonymizer
+from backend.domain.ports.anonymizer import Anonymizer
 
 
 class AnonymizationService:

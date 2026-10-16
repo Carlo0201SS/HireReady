@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from src.infrastructure.cv.rizzo_anonymizer import RizzoAnonymizer
+from backend.infrastructure.cv.rizzo_anonymizer import RizzoAnonymizer
 
 
 class RizzoAnonymizerTests(unittest.TestCase):

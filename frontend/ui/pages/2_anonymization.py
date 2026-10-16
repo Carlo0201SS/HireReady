@@ -1,6 +1,6 @@
 import streamlit as st
 
-from src.backend import anonymize_cv, is_anonymization_available
+from backend.backend import anonymize_cv, is_anonymization_available
 
 
 st.title("Anonimizzazione del CV")
@@ -8,7 +8,7 @@ st.title("Anonimizzazione del CV")
 source_text = st.session_state.get("extracted_cv_text", "")
 if not source_text:
 	st.info("Carica prima un CV nella pagina dedicata.")
-	st.page_link("src/ui/pages/1_upload_cv.py", label="Vai al caricamento del CV")
+	st.page_link("frontend/ui/pages/1_upload_cv.py", label="Vai al caricamento del CV")
 	st.stop()
 
 model_available = is_anonymization_available()
@@ -16,7 +16,7 @@ if not model_available:
 	st.warning("Il modello Rizzo PII non è ancora presente in locale.")
 	st.code(
 		"pip install -r requirements.txt\n"
-		"python -m src.infrastructure.cv.rizzo_anonymizer",
+		"python -m backend.infrastructure.cv.rizzo_anonymizer",
 		language="powershell",
 	)
 

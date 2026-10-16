@@ -180,7 +180,7 @@ class RizzoAnonymizer:
 			if not (self.model_dir / "config.json").is_file():
 				raise FileNotFoundError(
 					f"Modello Rizzo PII non trovato in {self.model_dir}. "
-					"Scaricalo prima con: python -m src.infrastructure.cv.rizzo_anonymizer"
+					"Scaricalo prima con: python -m backend.infrastructure.cv.rizzo_anonymizer"
 				)
 
 			from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline

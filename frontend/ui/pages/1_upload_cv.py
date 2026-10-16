@@ -2,7 +2,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from src.backend import extract_cv_text
+from backend.backend import extract_cv_text
 
 
 st.title("Carica il CV") 
@@ -38,4 +38,4 @@ if extracted_text:
 	spacer, proceed_column = st.columns([4, 1])
 	with proceed_column:
 		if st.button("Procedi all'anonimizzazione", type="primary", use_container_width=True):
-			st.switch_page("src/ui/pages/2_anonymization.py")
+			st.switch_page("frontend/ui/pages/2_anonymization.py")
