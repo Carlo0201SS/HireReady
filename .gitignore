@@ -25,6 +25,7 @@ Thumbs.db
 
 # Config locale (se contiene percorsi o token specifici della tua macchina)
 config.yaml
+.streamlit/secrets.toml
 
 # Modelli scaricati in locale
 /models/

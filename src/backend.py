@@ -7,12 +7,12 @@ from src.infrastructure.cv.pymupdf_extractor import PyMuPDFExtractor
 from src.infrastructure.cv.rizzo_anonymizer import RizzoAnonymizer
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=1) # memorizza il risultato della funzione.
 def _anonymization_service() -> AnonymizationService:
 	return AnonymizationService(RizzoAnonymizer())
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=1) # //
 def _cv_extraction_service() -> CVExtractionService:
 	return CVExtractionService(PyMuPDFExtractor(), DocxExtractor())
 
