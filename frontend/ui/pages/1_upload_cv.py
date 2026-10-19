@@ -2,7 +2,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from backend.backend import extract_cv_text
+from frontend.api_client import BackendApiError, api_client
 
 
 st.title("Carica il CV") 
@@ -17,7 +17,11 @@ extracted_text = st.session_state.get("extracted_cv_text", "")
 if uploaded_file is not None:
 	try:
 		file_bytes = uploaded_file.getvalue()
-		extracted_text = extract_cv_text(uploaded_file.name, file_bytes)
+		extracted_text = api_client.extract_cv_text(uploaded_file.name, file_bytes)
+	except BackendApiError as error:
+		extracted_text = ""
+		st.session_state["extracted_cv_text"] = ""
+		st.error(str(error))
 	except Exception:
 		extracted_text = ""
 		st.session_state["extracted_cv_text"] = ""
@@ -38,4 +42,4 @@ if extracted_text:
 	spacer, proceed_column = st.columns([4, 1])
 	with proceed_column:
 		if st.button("Procedi all'anonimizzazione", type="primary", use_container_width=True):
-			st.switch_page("frontend/ui/pages/2_anonymization.py")
+			st.switch_page(str(Path(__file__).resolve().with_name("2_anonymization.py")))

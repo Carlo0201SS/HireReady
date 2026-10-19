@@ -202,9 +202,13 @@ class RizzoAnonymizer:
 
 
 def download_model(destination: str | Path = DEFAULT_MODEL_DIR) -> Path:
+
 	model_dir = Path(destination).expanduser().resolve()
 	model_dir.mkdir(parents=True, exist_ok=True)
+
+	# metodo i huggingface che vuole il path corretto del modello da scaricare.
 	snapshot_download(repo_id=MODEL_REPOSITORY, local_dir=str(model_dir))
+	
 	return model_dir
 
 

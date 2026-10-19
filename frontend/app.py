@@ -1,4 +1,12 @@
+from pathlib import Path
+import sys
+
 import streamlit as st
+
+FRONTEND_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = FRONTEND_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+	sys.path.insert(0, str(PROJECT_ROOT))
 
 
 st.set_page_config(
@@ -18,7 +26,14 @@ st.markdown(
 	unsafe_allow_html=True,
 )
 
-upload_page = st.Page("frontend/ui/pages/1_upload_cv.py", title="Carica CV", default=True)
-anonymization_page = st.Page("frontend/ui/pages/2_anonymization.py", title="Anonimizzazione")
+upload_page = st.Page(
+	str(FRONTEND_DIR / "ui" / "pages" / "1_upload_cv.py"),
+	title="Carica CV",
+	default=True,
+)
+anonymization_page = st.Page(
+	str(FRONTEND_DIR / "ui" / "pages" / "2_anonymization.py"),
+	title="Anonimizzazione",
+)
 navigation = st.navigation([upload_page, anonymization_page], position="hidden")
 navigation.run()

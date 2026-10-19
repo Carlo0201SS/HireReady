@@ -1,6 +1,8 @@
+from pathlib import Path
+
 import streamlit as st
 
-from backend.backend import anonymize_cv, is_anonymization_available
+from frontend.api_client import BackendApiError, api_client
 
 
 st.title("Anonimizzazione del CV")
@@ -8,10 +10,18 @@ st.title("Anonimizzazione del CV")
 source_text = st.session_state.get("extracted_cv_text", "")
 if not source_text:
 	st.info("Carica prima un CV nella pagina dedicata.")
-	st.page_link("frontend/ui/pages/1_upload_cv.py", label="Vai al caricamento del CV")
+	st.page_link(
+		str(Path(__file__).resolve().with_name("1_upload_cv.py")),
+		label="Vai al caricamento del CV",
+	)
 	st.stop()
 
-model_available = is_anonymization_available()
+try:
+	model_available = api_client.anonymization_available()
+except BackendApiError as error:
+	st.error(str(error))
+	st.stop()
+
 if not model_available:
 	st.warning("Il modello Rizzo PII non è ancora presente in locale.")
 	st.code(
@@ -23,7 +33,9 @@ if not model_available:
 if st.button("Anonimizza CV", type="primary", disabled=not model_available):
 	with st.spinner("Analisi e anonimizzazione in corso..."):
 		try:
-			anonymized_text = anonymize_cv(source_text)
+			anonymized_text = api_client.anonymize_cv(source_text)
+		except BackendApiError as error:
+			st.error(str(error))
 		except Exception:
 			st.error("Anonimizzazione non riuscita. Verifica il modello locale e riprova.")
 		else:

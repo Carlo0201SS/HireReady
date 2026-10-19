@@ -17,6 +17,14 @@ huggingface_hub
 # UI
 streamlit
 
+# Backend API
+fastapi
+uvicorn
+python-multipart
+httpx  # TestClient FastAPI
+
 # Report Generation
 weasyprint
 Jinja2
+
+
