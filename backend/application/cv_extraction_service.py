@@ -2,7 +2,7 @@ from pathlib import Path
 
 from backend.domain.ports.cv_extractor import CVExtractor
 
-
+# E' un livello di astrazione, il quale non dipende da alcuna libreria o precisa implementazione.
 class CVExtractionService:
 	def __init__(self, pdf_extractor: CVExtractor, docx_extractor: CVExtractor) -> None:
 		self._extractors = {
