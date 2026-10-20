@@ -1,8 +1,15 @@
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
-from backend.backend import anonymize_cv, extract_cv_text, is_anonymization_available
+from backend.backend import (
+	anonymize_cv,
+	extract_cv_text,
+	is_anonymization_available,
+	parse_cv_for_interview,
+)
 from backend.domain.models.api import (
 	AnonymizationStatusResponse,
+	CVParserRequest,
+	CVParserResponse,
 	CVTextRequest,
 	CVTextResponse,
 )
@@ -22,6 +29,7 @@ def root() -> dict[str, object]:
 			"anonymization_status": "GET /api/anonymization/status",
 			"cv_extraction": "POST /api/cv/extract",
 			"cv_anonymization": "POST /api/cv/anonymize",
+			"cv_interview_parsing": "POST /api/cv/gemma_parse",
 		},
 	}
 
@@ -71,3 +79,16 @@ def anonymize_cv_text(request: CVTextRequest) -> CVTextResponse:
 			status_code=500,
 			detail="Anonimizzazione non riuscita.",
 		) from error
+
+
+@app.post("/api/cv/gemma_parse", response_model=CVParserResponse)
+def parse_cv_for_interview_endpoint(request: CVParserRequest) -> CVParserResponse:
+	try:
+		return parse_cv_for_interview(
+			anonymized_cv=request.anonymized_cv,
+			selected_position=request.selected_position,
+		)
+	except ValueError as error:
+		raise HTTPException(status_code=422, detail=str(error)) from error
+	except RuntimeError as error:
+		raise HTTPException(status_code=502, detail=str(error)) from error

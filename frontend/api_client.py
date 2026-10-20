@@ -50,5 +50,15 @@ class HireReadyApiClient:
 		result = self._request("POST", "/api/cv/anonymize", json={"text": text})
 		return result["text"]
 
+	def parse_cv_for_interview(self, anonymized_cv: str, selected_position: str) -> dict:
+		return self._request(
+			"POST",
+			"/api/cv/gemma_parse",
+			json={
+				"anonymized_cv": anonymized_cv,
+				"selected_position": selected_position,
+			},
+		)
+
 
 api_client = HireReadyApiClient()

@@ -35,5 +35,9 @@ anonymization_page = st.Page(
 	str(FRONTEND_DIR / "ui" / "pages" / "2_anonymization.py"),
 	title="Anonimizzazione",
 )
-navigation = st.navigation([upload_page, anonymization_page], position="hidden")
+position_page = st.Page(
+	str(FRONTEND_DIR / "ui" / "pages" / "3_choice_position.py"),
+	title="Posizione",
+)
+navigation = st.navigation([upload_page, anonymization_page, position_page], position="hidden")
 navigation.run()

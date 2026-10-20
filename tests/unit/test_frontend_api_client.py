@@ -38,6 +38,26 @@ class HireReadyApiClientTests(unittest.TestCase):
 		with self.assertRaisesRegex(BackendApiError, "FastAPI sia avviato"):
 			client.anonymize_cv("CV")
 
+	@patch("frontend.api_client.requests.request")
+	def test_posts_anonymized_cv_and_selected_position_for_parsing(self, request):
+		response = Mock(ok=True)
+		response.json.return_value = {
+			"selected_position": "ML Engineer",
+			"profile": {"technical_skills": ["Python"]},
+		}
+		request.return_value = response
+		client = HireReadyApiClient()
+
+		result = client.parse_cv_for_interview("CV [EMAIL]", "ML Engineer")
+
+		self.assertEqual(result["selected_position"], "ML Engineer")
+		args, kwargs = request.call_args
+		self.assertEqual(args[:2], ("POST", "http://127.0.0.1:8000/api/cv/gemma_parse"))
+		self.assertEqual(
+			kwargs["json"],
+			{"anonymized_cv": "CV [EMAIL]", "selected_position": "ML Engineer"},
+		)
+
 
 if __name__ == "__main__":
 	 unittest.main()

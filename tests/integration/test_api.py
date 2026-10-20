@@ -65,6 +65,35 @@ class HireReadyApiTests(unittest.TestCase):
 		self.assertEqual(response.json(), {"text": "[PERSON], [EMAIL]"})
 		anonymize.assert_called_once_with("Ada Lovelace, ada@example.com")
 
+	@patch("backend.api.parse_cv_for_interview")
+	def test_parse_cv_for_interview_endpoint(self, parse_cv):
+		parse_cv.return_value = {
+			"selected_position": "Sviluppatore web React",
+			"profile": {
+				"professional_summary": "Sviluppatrice web.",
+				"technical_skills": ["React", "TypeScript"],
+				"relevant_experience": ["Sviluppo UI web."],
+				"education": [],
+				"certifications": [],
+				"interview_focus": ["React"],
+			},
+		}
+		response = self.client.post(
+			"/api/cv/gemma_parse",
+			json={
+				"anonymized_cv": "CV anonimo",
+				"selected_position": "Sviluppatore web React",
+			},
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json()["selected_position"], "Sviluppatore web React")
+		self.assertEqual(response.json()["profile"]["technical_skills"], ["React", "TypeScript"])
+		parse_cv.assert_called_once_with(
+			anonymized_cv="CV anonimo",
+			selected_position="Sviluppatore web React",
+		)
+
 
 if __name__ == "__main__":
 	 unittest.main()

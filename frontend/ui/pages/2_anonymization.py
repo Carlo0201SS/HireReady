@@ -53,6 +53,9 @@ with original_column:
 with anonymized_column:
 	st.text_area("Testo anonimizzato", value=current_anonymized_text, height=360, disabled=True)
 
+if current_anonymized_text and st.button("Scegli la posizione", type="primary"):
+	st.switch_page(str(Path(__file__).resolve().with_name("3_choice_position.py")))
+
 if st.button("Cancella CV e risultati dalla sessione"):
 	for key in (
 		"cv_file_upload",
