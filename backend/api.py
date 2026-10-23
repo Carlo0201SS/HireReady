@@ -1,12 +1,16 @@
-from functools import lru_cache
+from contextlib import asynccontextmanager
+import os
+import threading
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 
 from backend.backend import (
+	anonymization_state,
 	anonymize_cv,
 	extract_cv_text,
 	is_anonymization_available,
 	parse_cv_for_interview,
+	warm_up_anonymization,
 )
 from backend.domain.models.api import (
 	AnonymizationStatusResponse,
@@ -16,27 +20,20 @@ from backend.domain.models.api import (
 	CVTextResponse,
 )
 
-from backend.manager.cv.docx_extractor import DocxExtractor
-from backend.manager.cv.pymupdf_extractor import PyMuPDFExtractor
-from backend.manager.cv.rizzo_anonymizer import RizzoAnonymizer
-
-from backend.application.anonymization_service import AnonymizationService
-from backend.application.cv_extraction_service import CVExtractionService
 
 
-app = FastAPI(title="HireReady API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+	# All'avvio scarica (se manca) e carica il modello Rizzo PII in background:
+	# l'API risponde subito e /api/anonymization/status ne riporta lo stato.
+	if os.getenv("HIREREADY_PRELOAD_MODELS", "1") == "1":
+		threading.Thread(target=warm_up_anonymization, name="rizzo-warm-up", daemon=True).start()
+	yield
 
 
-# ---Per ottenere i servizi: ---------------------------------------------------
+app = FastAPI(title="HireReady API", version="1.0.0", lifespan=lifespan)
 
-@lru_cache(maxsize=1) # mantiene in cache elementi già caricati per evitare un nuovo scaricamento
-def get_anonymization_service() -> AnonymizationService:
-    return AnonymizationService(RizzoAnonymizer())
-
-
-@lru_cache(maxsize=1)
-def get_cv_extraction_service() -> CVExtractionService:
-    return CVExtractionService(PyMuPDFExtractor(), DocxExtractor())
 
 
 # ---Endpoint-----------------------------------------------------------------
@@ -63,21 +60,21 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/anonymization/status", response_model=AnonymizationStatusResponse)
-def anonymization_status(
-    service: AnonymizationService = Depends(get_anonymization_service),
-) -> AnonymizationStatusResponse:
-    return AnonymizationStatusResponse(available=service.is_available)
+def anonymization_status() -> AnonymizationStatusResponse:
+    return AnonymizationStatusResponse(
+        available=is_anonymization_available(),
+        state=anonymization_state(),
+    )
 
 
 @app.post("/api/cv/extract", response_model=CVTextResponse)
-async def extract_cv(file: UploadFile = File(...), service: CVExtractionService = Depends(get_cv_extraction_service),
-) -> CVTextResponse:
+async def extract_cv(file: UploadFile = File(...)) -> CVTextResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Il file deve avere un nome valido.")
 
     try:
         content = await file.read()
-        text = service.extract_text(file.filename, content)
+        text = extract_cv_text(file.filename, content)
     except ValueError as error:
         raise HTTPException(status_code=415, detail=str(error)) from error
     except Exception as error:

@@ -1,14 +1,21 @@
-from typing import Dict, Tuple
+from typing import Any, Dict, List, Tuple
 import requests
 from argparse import ArgumentParser
 
 
+class LMStudioUnavailableError(RuntimeError):
+    """LM Studio non raggiungibile (server spento, timeout, errore di rete)."""
+
+
 class LMStudioAPI:
-    def __init__(self, url: str, api_key: str):
-        self._url: str = url
+    def __init__(self, url: str, api_key: str, timeout: float = 120):
+        self._url: str = url.rstrip('/')
         self._api_key: str = api_key
+        self._timeout: float = timeout
         self._endpoints: Dict[str, str] = {
             'chat': '/api/v1/chat',
+            # Endpoint OpenAI-compatibile: l'unico che supporta response_format / json_schema
+            'chat-completions': '/v1/chat/completions',
             'list-models': '/api/v1/models',
             'load-model': '/api/v1/models/load',
             'unload-model': '/api/v1/models/unload',
@@ -27,9 +34,24 @@ class LMStudioAPI:
             'Content-Type': 'application/json',
         }
 
+    def _send(self, method: str, endpoint: str, **kwargs) -> Tuple[int, str]:
+        try:
+            r = requests.request(
+                method,
+                self._url + self._endpoints[endpoint],
+                timeout=self._timeout,
+                **kwargs,
+            )
+        except requests.RequestException as error:
+            raise LMStudioUnavailableError(
+                'Impossibile contattare LM Studio. Verifica che il server locale sia avviato.'
+            ) from error
+        return r.status_code, r.text
+
     def chat_with_model(self, model: str, input_msg: str, ctx_len: int, temperature: float) -> Tuple[int, str]:
-        r = requests.post(
-            self._url+self._endpoints['chat'],
+        return self._send(
+            'POST',
+            'chat',
             headers=self._auth_and_content_header,
             json={
                 'model': model,
@@ -37,18 +59,27 @@ class LMStudioAPI:
                 'integrations': [],
                 'context_length': ctx_len,
                 'temperature': temperature,
-            }
+            },
         )
 
-        return r.status_code, r.text
+    def chat_completions(
+        self,
+        model: str,
+        messages: List[Dict[str, str]],
+        response_format: Dict[str, Any] | None = None,
+    ) -> Tuple[int, str]:
+        payload: Dict[str, Any] = {'model': model, 'messages': messages}
+        if response_format is not None:
+            payload['response_format'] = response_format
+        return self._send(
+            'POST',
+            'chat-completions',
+            headers=self._auth_and_content_header,
+            json=payload,
+        )
 
     def get_list_models(self) -> Tuple[int, str]:
-        r = requests.get(
-            self._url+self._endpoints['list-models'],
-            headers=self._auth_header,
-        )
-
-        return r.status_code, r.text
+        return self._send('GET', 'list-models', headers=self._auth_header)
 
     def load_model(self, model_id: str) -> Tuple[int, str]:
         raise NotImplementedError('TBA!')

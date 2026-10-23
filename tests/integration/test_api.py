@@ -25,12 +25,13 @@ class HireReadyApiTests(unittest.TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.json(), {"status": "ok"})
 
+	@patch("backend.api.anonymization_state", return_value="ready")
 	@patch("backend.api.is_anonymization_available", return_value=True)
-	def test_anonymization_status(self, is_available):
+	def test_anonymization_status(self, is_available, state):
 		response = self.client.get("/api/anonymization/status")
 
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.json(), {"available": True})
+		self.assertEqual(response.json(), {"available": True, "state": "ready"})
 		is_available.assert_called_once_with()
 
 	@patch("backend.api.extract_cv_text", return_value="CV estratto")

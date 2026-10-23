@@ -29,6 +29,7 @@ config.yaml
 
 # Modelli scaricati in locale
 /models/
+/ai_models/
 
 # Log e output locali
 logs/

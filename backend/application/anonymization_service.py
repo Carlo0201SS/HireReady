@@ -9,5 +9,12 @@ class AnonymizationService:
 	def is_available(self) -> bool:
 		return self._anonymizer.is_available
 
+	@property
+	def state(self) -> str:
+		return self._anonymizer.state
+
+	def warm_up(self) -> None:
+		self._anonymizer.warm_up()
+
 	def anonymize(self, text: str) -> str:
 		return self._anonymizer.anonymize(text)

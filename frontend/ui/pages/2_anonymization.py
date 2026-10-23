@@ -17,18 +17,26 @@ if not source_text:
 	st.stop()
 
 try:
-	model_available = api_client.anonymization_available()
+	model_status = api_client.anonymization_status()
 except BackendApiError as error:
 	st.error(str(error))
 	st.stop()
 
-if not model_available:
-	st.warning("Il modello Rizzo PII non è ancora presente in locale.")
-	st.code(
-		"pip install -r requirements.txt\n"
-		"python -m backend.infrastructure.cv.rizzo_anonymizer",
-		language="powershell",
+model_state = model_status.get("state", "idle")
+model_available = model_status["available"] and model_state != "error"
+pending_messages = {
+	"downloading": "Il backend sta scaricando il modello Rizzo PII (circa 1,2 GB): serve solo la prima volta.",
+	"loading": "Il backend sta caricando in memoria il modello Rizzo PII.",
+}
+if model_state == "error":
+	st.error(
+		"Preparazione del modello Rizzo PII non riuscita. "
+		"Controlla il terminale del backend e riavvialo."
 	)
+elif model_state in pending_messages or not model_available:
+	st.info(pending_messages.get(model_state, "Il modello Rizzo PII non è ancora pronto."))
+	if st.button("Aggiorna stato"):
+		st.rerun()
 
 if st.button("Anonimizza CV", type="primary", disabled=not model_available):
 	with st.spinner("Analisi e anonimizzazione in corso..."):

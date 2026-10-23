@@ -1,4 +1,6 @@
 from argparse import ArgumentParser
+import logging
+import threading
 from pathlib import Path
 import re
 from urllib.parse import urlsplit
@@ -7,7 +9,7 @@ from huggingface_hub import snapshot_download
 
 
 MODEL_REPOSITORY = "rizzoaiacademy/rizzo-pii-0.3B"
-DEFAULT_MODEL_DIR = Path(__file__).resolve().parents[3] / "models" / "rizzo-pii-0.3B"
+DEFAULT_MODEL_DIR = Path(__file__).resolve().parents[3] / "ai_models" / "rizzo-pii-0.3B"
 REDACTION_POLICY = {
 	"entity_labels": {
 		"EMAIL_ADDRESS": "EMAIL",
@@ -90,10 +92,31 @@ class RizzoAnonymizer:
 	def __init__(self, model_dir: str | Path = DEFAULT_MODEL_DIR) -> None:
 		self.model_dir = Path(model_dir).expanduser().resolve()
 		self._pipeline = None
+		self._lock = threading.Lock()
+		# idle -> downloading -> loading -> ready  (oppure error)
+		self.state = "idle"
+
+	def warm_up(self) -> None:
+		"""Scarica il modello se manca e lo carica in memoria. Pensato per l'avvio del backend."""
+		try:
+			if not self.is_available:
+				self.state = "downloading"
+				download_model(self.model_dir, force=True)
+			self.state = "loading"
+			self._get_pipeline()
+			self.state = "ready"
+		except Exception:
+			self.state = "error"
+			logging.exception("Preparazione del modello Rizzo PII non riuscita")
 
 	@property
 	def is_available(self) -> bool:
-		return (self.model_dir / "config.json").is_file()
+		weights = self.model_dir / "model.safetensors"
+		if not (self.model_dir / "config.json").is_file() or not weights.is_file():
+			return False
+		# Un checkout git senza git-lfs lascia un file "puntatore" di pochi byte al posto dei pesi.
+		with weights.open("rb") as file:
+			return not file.read(64).startswith(b"version https://git-lfs")
 
 	def anonymize(self, text: str) -> str:
 		if not text.strip():
@@ -176,11 +199,15 @@ class RizzoAnonymizer:
 		return (urlsplit(url).hostname or "").lower().removeprefix("www.")
 
 	def _get_pipeline(self):
+		with self._lock:
+			return self._load_pipeline()
+
+	def _load_pipeline(self):
 		if self._pipeline is None:
-			if not (self.model_dir / "config.json").is_file():
+			if not self.is_available:
 				raise FileNotFoundError(
 					f"Modello Rizzo PII non trovato in {self.model_dir}. "
-					"Scaricalo prima con: python -m backend.infrastructure.cv.rizzo_anonymizer"
+					"Scaricalo prima con: python -m backend.manager.cv.rizzo_anonymizer"
 				)
 
 			from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
@@ -201,13 +228,13 @@ class RizzoAnonymizer:
 		return self._pipeline
 
 
-def download_model(destination: str | Path = DEFAULT_MODEL_DIR) -> Path:
+def download_model(destination: str | Path = DEFAULT_MODEL_DIR, force: bool = False) -> Path:
 
 	model_dir = Path(destination).expanduser().resolve()
 	model_dir.mkdir(parents=True, exist_ok=True)
 
 	# metodo i huggingface che vuole il path corretto del modello da scaricare.
-	snapshot_download(repo_id=MODEL_REPOSITORY, local_dir=str(model_dir))
+	snapshot_download(repo_id=MODEL_REPOSITORY, local_dir=str(model_dir), force_download=force)
 	
 	return model_dir
 
@@ -220,9 +247,14 @@ def main() -> None:
 		default=DEFAULT_MODEL_DIR,
 		help="Cartella locale in cui salvare il modello.",
 	)
+	parser.add_argument(
+		"--force",
+		action="store_true",
+		help="Riscarica i file anche se risultano già presenti (es. puntatori git-lfs).",
+	)
 	args = parser.parse_args()
 
-	model_dir = download_model(args.destination)
+	model_dir = download_model(args.destination, force=args.force)
 	print(f"Modello disponibile in: {model_dir}")
 
 

@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import streamlit as st
@@ -22,10 +23,13 @@ if uploaded_file is not None:
 		extracted_text = ""
 		st.session_state["extracted_cv_text"] = ""
 		st.error(str(error))
-	except Exception:
+	except Exception as error:
+		logging.exception("Errore inatteso durante l'estrazione del CV")
 		extracted_text = ""
 		st.session_state["extracted_cv_text"] = ""
-		st.error("Impossibile leggere il documento. Verifica che sia valido e non protetto da password.")
+		st.error(f"Errore inatteso nel frontend ({type(error).__name__}). Dettagli qui sotto.")
+		with st.expander("Dettagli tecnici"):
+			st.exception(error)
 	else:
 		st.session_state["extracted_cv_text"] = extracted_text
 		if extracted_text:

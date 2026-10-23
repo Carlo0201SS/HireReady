@@ -16,6 +16,8 @@ class CVTextResponse(BaseModel):
 
 class AnonymizationStatusResponse(BaseModel):
 	available: bool
+	# idle | downloading | loading | ready | error
+	state: str = "idle"
 
 
 class CVParserRequest(BaseModel):

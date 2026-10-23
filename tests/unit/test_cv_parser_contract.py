@@ -3,11 +3,13 @@ from unittest.mock import Mock, patch
 import json
 
 from pydantic import ValidationError
+import requests
 
 from backend.application.cv_parser_orchestrator import CVParserOrchestrator
 from backend.domain.models.api import CVParserRequest
 from backend.domain.models.cv import CVInterviewContext, CVParsedProfile
-from HireReady.backend.manager.llm.gemma_cv_parser import GemmaCVParser
+from backend.manager.llm.gemma_cv_parser import GemmaCVParser
+from interops.lm_studio_client import LMStudioAPI, LMStudioUnavailableError
 
 
 PROFILE = {
@@ -72,41 +74,65 @@ class CVParserOrchestratorTests(unittest.TestCase):
 
 
 class GemmaCVParserTests(unittest.TestCase):
-	@patch("backend.infrastructure.llm.gemma_cv_parser.requests.post")
-	def test_sends_anonymized_cv_and_position_with_json_schema(self, post):
-		response = Mock(ok=True)
-		response.json.return_value = {
-			"choices": [{"message": {"content": json.dumps(PROFILE)}}],
-		}
-		post.return_value = response
-		parser = GemmaCVParser(
-			base_url="http://localhost:1234/v1",
-			model="google/gemma-4-e2b",
-			api_key="test-key",
+	def test_sends_anonymized_cv_and_position_with_json_schema_via_interops(self):
+		lm_studio = Mock()
+		lm_studio.chat_completions.return_value = (
+			200,
+			json.dumps({"choices": [{"message": {"content": json.dumps(PROFILE)}}]}),
 		)
+		parser = GemmaCVParser(lm_studio=lm_studio, model="google/gemma-4-e2b")
 
 		profile = parser.parse("CV [EMAIL]", "Sviluppatore web React")
 
 		self.assertEqual(profile.technical_skills, ["React", "TypeScript"])
-		kwargs = post.call_args.kwargs
-		self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-key")
-		messages = kwargs["json"]["messages"]
+		model, messages, response_format = lm_studio.chat_completions.call_args.args
+		self.assertEqual(model, "google/gemma-4-e2b")
 		self.assertIn("CV [EMAIL]", messages[1]["content"])
 		self.assertIn("Sviluppatore web React", messages[1]["content"])
 		self.assertEqual(
-			kwargs["json"]["response_format"]["json_schema"]["schema"],
+			response_format["json_schema"]["schema"],
 			CVParsedProfile.model_json_schema(),
 		)
 
-	@patch("backend.infrastructure.llm.gemma_cv_parser.requests.post")
-	def test_rejects_nonconforming_model_output(self, post):
-		response = Mock(ok=True)
-		response.json.return_value = {"choices": [{"message": {"content": "{}"}}]}
-		post.return_value = response
-		parser = GemmaCVParser()
+	def test_rejects_nonconforming_model_output(self):
+		lm_studio = Mock()
+		lm_studio.chat_completions.return_value = (
+			200,
+			json.dumps({"choices": [{"message": {"content": "{}"}}]}),
+		)
+		parser = GemmaCVParser(lm_studio=lm_studio)
 
 		with self.assertRaisesRegex(RuntimeError, "non conforme allo schema"):
 			parser.parse("CV anonimizzato", "ML Engineer")
+
+	def test_reports_lm_studio_unavailable(self):
+		lm_studio = Mock()
+		lm_studio.chat_completions.side_effect = LMStudioUnavailableError("LM Studio giù")
+		parser = GemmaCVParser(lm_studio=lm_studio)
+
+		with self.assertRaisesRegex(RuntimeError, "LM Studio giù"):
+			parser.parse("CV anonimizzato", "ML Engineer")
+
+
+class LMStudioAPITests(unittest.TestCase):
+	@patch("interops.lm_studio_client.requests.request")
+	def test_chat_completions_posts_to_openai_compatible_endpoint(self, request):
+		request.return_value = Mock(status_code=200, text="{}")
+		api = LMStudioAPI("http://127.0.0.1:1234/", "test-key", timeout=5)
+
+		status, _ = api.chat_completions("m", [{"role": "user", "content": "ciao"}], {"type": "json_schema"})
+
+		self.assertEqual(status, 200)
+		args, kwargs = request.call_args
+		self.assertEqual(args, ("POST", "http://127.0.0.1:1234/v1/chat/completions"))
+		self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-key")
+		self.assertEqual(kwargs["json"]["response_format"], {"type": "json_schema"})
+		self.assertEqual(kwargs["timeout"], 5)
+
+	@patch("interops.lm_studio_client.requests.request", side_effect=requests.ConnectionError)
+	def test_wraps_network_errors(self, request):
+		with self.assertRaises(LMStudioUnavailableError):
+			LMStudioAPI("http://127.0.0.1:1234", "").get_list_models()
 
 
 if __name__ == "__main__":

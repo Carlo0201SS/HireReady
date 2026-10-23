@@ -23,6 +23,14 @@ def _cv_extraction_service() -> CVExtractionService:
 	return CVExtractionService(PyMuPDFExtractor(), DocxExtractor())
 
 
+def warm_up_anonymization() -> None:
+	_anonymization_service().warm_up()
+
+
+def anonymization_state() -> str:
+	return _anonymization_service().state
+
+
 def is_anonymization_available() -> bool:
 	return _anonymization_service().is_available
 
