@@ -7,10 +7,10 @@ from backend.application.cv_parser_orchestrator import CVParserOrchestrator
 from backend.domain.models.cv import CVInterviewContext
 
 
-from backend.infrastructure.cv.docx_extractor import DocxExtractor
-from backend.infrastructure.cv.pymupdf_extractor import PyMuPDFExtractor
-from backend.infrastructure.cv.rizzo_anonymizer import RizzoAnonymizer
-from backend.infrastructure.llm.gemma_cv_parser import GemmaCVParser
+from backend.manager.cv.docx_extractor import DocxExtractor
+from backend.manager.cv.pymupdf_extractor import PyMuPDFExtractor
+from backend.manager.cv.rizzo_anonymizer import RizzoAnonymizer
+from backend.manager.llm.gemma_cv_parser import GemmaCVParser
 
 
 @lru_cache(maxsize=1) # lru_cache memorizza il risultato della funzione.

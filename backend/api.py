@@ -1,4 +1,6 @@
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from functools import lru_cache
+
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 
 from backend.backend import (
 	anonymize_cv,
@@ -14,9 +16,30 @@ from backend.domain.models.api import (
 	CVTextResponse,
 )
 
+from backend.manager.cv.docx_extractor import DocxExtractor
+from backend.manager.cv.pymupdf_extractor import PyMuPDFExtractor
+from backend.manager.cv.rizzo_anonymizer import RizzoAnonymizer
+
+from backend.application.anonymization_service import AnonymizationService
+from backend.application.cv_extraction_service import CVExtractionService
+
 
 app = FastAPI(title="HireReady API", version="1.0.0")
 
+
+# ---Per ottenere i servizi: ---------------------------------------------------
+
+@lru_cache(maxsize=1) # mantiene in cache elementi già caricati per evitare un nuovo scaricamento
+def get_anonymization_service() -> AnonymizationService:
+    return AnonymizationService(RizzoAnonymizer())
+
+
+@lru_cache(maxsize=1)
+def get_cv_extraction_service() -> CVExtractionService:
+    return CVExtractionService(PyMuPDFExtractor(), DocxExtractor())
+
+
+# ---Endpoint-----------------------------------------------------------------
 
 @app.get("/")
 def root() -> dict[str, object]:
@@ -36,33 +59,36 @@ def root() -> dict[str, object]:
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
-	return {"status": "ok"}
+    return {"status": "ok"}
 
 
 @app.get("/api/anonymization/status", response_model=AnonymizationStatusResponse)
-def anonymization_status() -> AnonymizationStatusResponse:
-	return AnonymizationStatusResponse(available=is_anonymization_available())
+def anonymization_status(
+    service: AnonymizationService = Depends(get_anonymization_service),
+) -> AnonymizationStatusResponse:
+    return AnonymizationStatusResponse(available=service.is_available)
 
 
 @app.post("/api/cv/extract", response_model=CVTextResponse)
-async def extract_cv(file: UploadFile = File(...)) -> CVTextResponse:
-	if not file.filename:
-		raise HTTPException(status_code=400, detail="Il file deve avere un nome valido.")
+async def extract_cv(file: UploadFile = File(...), service: CVExtractionService = Depends(get_cv_extraction_service),
+) -> CVTextResponse:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Il file deve avere un nome valido.")
 
-	try:
-		content = await file.read()
-		text = extract_cv_text(file.filename, content)
-	except ValueError as error:
-		raise HTTPException(status_code=415, detail=str(error)) from error
-	except Exception as error:
-		raise HTTPException(
-			status_code=422,
-			detail="Impossibile estrarre il testo dal documento caricato.",
-		) from error
-	finally:
-		await file.close()
+    try:
+        content = await file.read()
+        text = service.extract_text(file.filename, content)
+    except ValueError as error:
+        raise HTTPException(status_code=415, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=422,
+            detail="Impossibile estrarre il testo dal documento caricato.",
+        ) from error
+    finally:
+        await file.close()
 
-	return CVTextResponse(text=text)
+    return CVTextResponse(text=text)
 
 
 @app.post("/api/cv/anonymize", response_model=CVTextResponse)

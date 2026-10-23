@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from backend.application.cv_parser_orchestrator import CVParserOrchestrator
 from backend.domain.models.api import CVParserRequest
 from backend.domain.models.cv import CVInterviewContext, CVParsedProfile
-from backend.infrastructure.llm.gemma_cv_parser import GemmaCVParser
+from HireReady.backend.manager.llm.gemma_cv_parser import GemmaCVParser
 
 
 PROFILE = {
