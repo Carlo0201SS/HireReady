@@ -4,7 +4,7 @@ from backend.application.anonymization_service import AnonymizationService
 from backend.application.cv_extraction_service import CVExtractionService
 from backend.application.cv_parser_orchestrator import CVParserOrchestrator
 
-from backend.domain.models.cv import CVInterviewContext
+from backend.domain.models.cv_model import CVInterviewContext
 
 
 from backend.manager.cv.docx_extractor import DocxExtractor

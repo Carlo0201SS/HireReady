@@ -6,8 +6,8 @@ from pydantic import ValidationError
 import requests
 
 from backend.application.cv_parser_orchestrator import CVParserOrchestrator
-from backend.domain.models.api import CVParserRequest
-from backend.domain.models.cv import CVInterviewContext, CVParsedProfile
+from backend.domain.models.api_model import CVParserRequest
+from backend.domain.models.cv_model import CVInterviewContext, CVParsedProfile
 from backend.manager.llm.gemma_cv_parser import GemmaCVParser
 from interops.lm_studio_client import LMStudioAPI, LMStudioUnavailableError
 

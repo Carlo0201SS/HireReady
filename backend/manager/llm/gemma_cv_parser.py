@@ -3,7 +3,7 @@ import os
 
 from pydantic import ValidationError
 
-from backend.domain.models.cv import CVParsedProfile
+from backend.domain.models.cv_model import CVParsedProfile
 from interops.lm_studio_client import LMStudioAPI, LMStudioUnavailableError
 
 

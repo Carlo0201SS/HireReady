@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from backend.domain.models.cv import CVParsedProfile
+from backend.domain.models.cv_model import CVParsedProfile
 
 
 class CVParser(Protocol):

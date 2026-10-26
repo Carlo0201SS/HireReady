@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.domain.models.cv import CVInterviewContext
+from backend.domain.models.cv_model import CVInterviewContext
 
 
 

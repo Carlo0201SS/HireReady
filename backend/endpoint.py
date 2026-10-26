@@ -4,7 +4,7 @@ import threading
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
-from backend.backend import (
+from backend.controller import (
 	anonymization_state,
 	anonymize_cv,
 	extract_cv_text,
@@ -12,13 +12,15 @@ from backend.backend import (
 	parse_cv_for_interview,
 	warm_up_anonymization,
 )
-from backend.domain.models.api import (
+from backend.domain.models.api_model import (
 	AnonymizationStatusResponse,
 	CVParserRequest,
 	CVParserResponse,
 	CVTextRequest,
 	CVTextResponse,
 )
+
+
 
 
 
@@ -115,3 +117,5 @@ def parse_cv_for_interview_endpoint(request: CVParserRequest) -> CVParserRespons
 		raise HTTPException(status_code=422, detail=str(error)) from error
 	except RuntimeError as error:
 		raise HTTPException(status_code=502, detail=str(error)) from error
+
+
