@@ -3,7 +3,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from frontend.api_client import BackendApiError, api_client
+from interops.api_client import BackendApiError, api_client
 
 
 st.title("Carica il CV") 

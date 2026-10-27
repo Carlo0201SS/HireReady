@@ -240,6 +240,7 @@ def download_model(destination: str | Path = DEFAULT_MODEL_DIR, force: bool = Fa
 
 
 def main() -> None:
+	#---------POSSIBILE ESCLUSIONE DI CODICE-----------------------------------
 	parser = ArgumentParser(description="Scarica localmente il modello Rizzo PII.")
 	parser.add_argument(
 		"--destination",
@@ -256,7 +257,7 @@ def main() -> None:
 
 	model_dir = download_model(args.destination, force=args.force)
 	print(f"Modello disponibile in: {model_dir}")
-
+	#------------------------------------------------------------------------------
 
 if __name__ == "__main__":
 	main()

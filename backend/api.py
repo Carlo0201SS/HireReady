@@ -52,6 +52,7 @@ def root() -> dict[str, object]:
 			"cv_extraction": "POST /api/cv/extract",
 			"cv_anonymization": "POST /api/cv/anonymize",
 			"cv_interview_parsing": "POST /api/cv/gemma_parse",
+			"interview": "POST /api/interview"
 		},
 	}
 

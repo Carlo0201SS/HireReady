@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from frontend.api_client import BackendApiError, HireReadyApiClient
+from interops.api_client import BackendApiError, HireReadyApiClient
 
 
 class HireReadyApiClientTests(unittest.TestCase):

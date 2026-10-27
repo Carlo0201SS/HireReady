@@ -1,7 +1,7 @@
 from pathlib import Path
 import streamlit as st
 
-from frontend.api_client import BackendApiError, api_client
+from interops.api_client import BackendApiError, api_client
 
 
 st.title("Posizione di candidatura")
@@ -11,6 +11,7 @@ st.header("Posizione di candidatura", text_alignment="center")
 anonymized_cv = st.session_state.get("anonymized_cv_text", "")
 anonymized_source = st.session_state.get("anonymized_source_text", "")
 source_cv = st.session_state.get("extracted_cv_text", "")
+
 if not anonymized_cv or anonymized_source != source_cv:
 	st.info("Anonimizza il CV aggiornato prima di scegliere la posizione.")
 	st.page_link(
@@ -28,6 +29,7 @@ with st.form("position_selection"):
 
 if submitted:
 	st.session_state["selected_position"] = selected_position
+	st.switch_page(str(Path(__file__).resolve().with_name("4_interview.py")))
 	with st.spinner("Gemma sta elaborando il CV per la posizione selezionata..."):
 		try:
 			parsed_context = api_client.parse_cv_for_interview(
