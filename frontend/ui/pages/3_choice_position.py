@@ -29,7 +29,7 @@ with st.form("position_selection"):
 
 if submitted:
 	st.session_state["selected_position"] = selected_position
-	st.switch_page(str(Path(__file__).resolve().with_name("4_interview.py")))
+	
 	with st.spinner("Gemma sta elaborando il CV per la posizione selezionata..."):
 		try:
 			parsed_context = api_client.parse_cv_for_interview(
@@ -42,4 +42,5 @@ if submitted:
 			st.session_state["cv_interview_context"] = parsed_context
 			st.success("Profilo estratto e salvato nella sessione.")
 			st.json(parsed_context["profile"])
+			st.switch_page(str(Path(__file__).resolve().with_name("4_interview.py")))
 

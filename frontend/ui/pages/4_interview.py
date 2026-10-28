@@ -2,6 +2,7 @@ import streamlit as st
 import os
 from pathlib import Path
 
+from interops.api_client import *
 # ----------------------------------------------------------------------
 # CONFIGURAZIONE PAGINA
 # ----------------------------------------------------------------------
@@ -137,9 +138,7 @@ risposta_utente = st.text_area(
     key="input_risposta",
 )
 
-# ----------------------------------------------------------------------
-# RIGA INFERIORE: SEGNALINO FASE (SX) + PULSANTE PROCEDI (DX)
-# ----------------------------------------------------------------------
+
 # ----------------------------------------------------------------------
 # RIGA INFERIORE: SEGNALINO VALUTAZIONE (SX) + PULSANTE PROCEDI (DX)
 # ----------------------------------------------------------------------
@@ -161,7 +160,7 @@ with col_segnalino:
         if stato == "buona":
             img_ok = Path("assets") / "spunta_verde.png"
             if img_ok.exists():
-                st.image(str(img_ok), width=90)
+                st.image(str(img_ok), width=50)
             else:
                 st.markdown(
                     '<div class="fase-badge" style="background:#c8f7c5;">✅ Risposta buona</div>',
@@ -172,7 +171,7 @@ with col_segnalino:
         elif stato == "difetti":
             img_dif = Path("assets") / "emoji_pensante.png"
             if img_dif.exists():
-                st.image(str(img_dif), width=90)
+                st.image(str(img_dif), width=50)
             else:
                 st.markdown(
                     '<div class="fase-badge" style="background:#ffe9a8;">🤔 Risposta con difetti</div>',
@@ -194,7 +193,7 @@ with col_segnalino:
         elif stato == "negativa":
             img_neg = Path("assets") / "croce_rossa.png"
             if img_neg.exists():
-                st.image(str(img_neg), width=90)
+                st.image(str(img_neg), width=50)
             else:
                 st.markdown(
                     '<div class="fase-badge" style="background:#ffc9c9;">❌ Risposta non adeguata</div>',
@@ -226,29 +225,28 @@ with col_bottone:
 # ----------------------------------------------------------------------
 # GESTIONE PULSANTE PROCEDI
 # ----------------------------------------------------------------------
-if procedi:
-    if risposta_utente.strip():
-        # Salva nella cronologia
-        st.session_state.cronologia.append(
-            {"fase": FASE_CORRENTE, "risposta": risposta_utente.strip()}
-        )
 
-        # --- QUI andrebbe la chiamata all'LLM ---
-        # Esempio fittizio: la risposta LLM viene aggiornata
-        st.session_state.risposta_llm = (
-            f"Ricevuto per la fase {FASE_CORRENTE}: "
-            f"«{risposta_utente.strip()[:80]}...». "
-            f"Passiamo alla fase successiva."
-        )
+if "interview_turn" not in st.session_state:
+	context = st.session_state["cv_interview_context"]
+	response = api_client.interview(
+		selected_position=context["selected_position"],
+		profile=context["profile"],
+	)
+	st.session_state["interview_turn"] = response["turn"]
+	st.session_state["interview_history"] = response["history"]
+	st.session_state["interview_closed"] = response["is_closed"]
 
-        # Avanza di fase (fino a MAX_FASI)
-        if st.session_state.fase < MAX_FASI:
-            st.session_state.fase += 1
-
-        st.rerun()
-    else:
-        st.warning("Per favore, scrivi una risposta prima di procedere.")
-
+# Ad ogni "Procedi"
+if procedi and risposta_utente.strip():
+	response = api_client.interview(
+		history=st.session_state["interview_history"],
+		last_turn=st.session_state["interview_turn"],
+		candidate_answer=risposta_utente.strip(),
+	)
+	st.session_state["interview_turn"] = response["turn"]
+	st.session_state["interview_history"] = response["history"]
+	st.session_state["interview_closed"] = response["is_closed"]
+	st.rerun()
 # ----------------------------------------------------------------------
 # (OPZIONALE) CRONOLOGIA IN ESPANSIONE
 # ----------------------------------------------------------------------

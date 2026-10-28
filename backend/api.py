@@ -18,6 +18,12 @@ from backend.domain.models.api_model import (
 	CVParserResponse,
 	CVTextRequest,
 	CVTextResponse,
+	InterviewResponse,
+	InterviewRequest,
+)
+
+from backend.domain.models.interview_model import (
+	HireReadyTurn,
 )
 
 
@@ -118,5 +124,22 @@ def parse_cv_for_interview_endpoint(request: CVParserRequest) -> CVParserRespons
 		raise HTTPException(status_code=422, detail=str(error)) from error
 	except RuntimeError as error:
 		raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.post("/api/interview", response_model=InterviewResponse)
+def interview(request: InterviewRequest) -> InterviewResponse:
+	try:
+		turn, state = InterviewRequest(
+			history=request.history,
+			last_turn=request.last_turn,
+			candidate_answer=request.candidate_answer,
+			selected_position=request.selected_position,
+			profile=request.profile,
+		)
+	except ValueError as error:
+		raise HTTPException(status_code=422, detail=str(error)) from error
+	except RuntimeError as error:
+		raise HTTPException(status_code=502, detail=str(error)) from error
+	return InterviewResponse(turn=turn, history=state.history, is_closed=state.is_closed)
 
 

@@ -1,5 +1,13 @@
+# interops/api_client.py
+
 import os
 import requests
+
+from backend.domain.models.interview_model import HireReadyTurn
+from backend.domain.models.cv_model import CVParsedProfile
+from backend.domain.models.api_model import InterviewResponse 
+
+
 
 
 class BackendApiError(RuntimeError):
@@ -37,6 +45,9 @@ class HireReadyApiClient:
 			raise BackendApiError(str(detail))
 		return response.json()
 
+	# ------------------------------------------------------------------
+	# CV
+	# ------------------------------------------------------------------
 	def extract_cv_text(self, filename: str, content: bytes) -> str:
 		result = self._request(
 			"POST",
@@ -64,6 +75,43 @@ class HireReadyApiClient:
 				"selected_position": selected_position,
 			},
 		)
+
+	# ------------------------------------------------------------------
+	# Colloquio
+	# ------------------------------------------------------------------
+	def interview(
+		self,
+		*,
+		history: list[dict[str, str]] | None = None,
+		last_turn: HireReadyTurn | None = None,
+		candidate_answer: str | None = None,
+		selected_position: str | None = None,
+		profile: CVParsedProfile | None = None,
+	) -> InterviewResponse:
+		"""Chiama POST /api/interview.
+
+		- Turno 0: passare `selected_position` + `profile`.
+		- Turni successivi: passare `history` + `last_turn` + `candidate_answer`.
+		"""
+		payload: dict = {"history": history or [], "last_turn": last_turn}
+		if candidate_answer is not None:
+			payload["candidate_answer"] = candidate_answer
+		if selected_position is not None:
+			payload["selected_position"] = selected_position
+		if profile is not None:
+			payload["profile"] = profile
+		return self._request("POST", "/api/interview", json=payload)
+
+	# ------------------------------------------------------------------
+	# Utility
+	# ------------------------------------------------------------------
+	@staticmethod
+	def is_interview_closed(turn: dict) -> bool:
+		"""Determina se un HireReadyTurn chiude il colloquio."""
+		if not turn:
+			return False
+		is_meaningful = turn.get("is_meaningful") or {}
+		return bool(turn.get("is_final") or is_meaningful.get("azione") == "blocca")
 
 
 api_client = HireReadyApiClient()
