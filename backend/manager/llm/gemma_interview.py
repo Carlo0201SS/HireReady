@@ -116,7 +116,7 @@ class GemmaInterview:
         return SYSTEM_PROMPT_TEMPLATE.format(
             position=position,
             candidate_profile=profile_json,
-            domande_tecniche= DOMANDE_TECNICHE,
+            num_domande_tecniche=DOMANDE_TECNICHE,
         )
 
     # ------------------------------------------------------------------
@@ -178,7 +178,7 @@ class GemmaInterview:
                 turn = self._force_close_turn(turn)
                 state.last_turn = turn
 
-        return turn, state
+        return turn
 
     # ------------------------------------------------------------------
     # Internals
@@ -248,7 +248,7 @@ class GemmaInterview:
         """Sostituisce il turno con un messaggio di chiusura controllato."""
         forced = turn.model_copy(
             update={
-                "is_final": False,
+                "is_final": True,
                 "phase": "finale",
                 "next_question": None,
                 "evaluation_of_previous_answer": (

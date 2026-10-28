@@ -6,7 +6,6 @@ from backend.application.cv_parser_orchestrator import CVParserOrchestrator
 
 from backend.domain.models.cv_model import CVInterviewContext
 from backend.domain.models.interview_model import HireReadyTurn
-from backend.domain.models.api_model import InterviewRequest
 
 
 
@@ -14,7 +13,7 @@ from backend.manager.cv.docx_extractor import DocxExtractor
 from backend.manager.cv.pymupdf_extractor import PyMuPDFExtractor
 from backend.manager.cv.rizzo_anonymizer import RizzoAnonymizer
 from backend.manager.llm.gemma_cv_parser import GemmaCVParser
-from backend.manager.llm.gemma_interview import GemmaInterview
+from backend.manager.llm.gemma_interview import GemmaInterview, InterviewState
 
 
 @lru_cache(maxsize=1) # lru_cache memorizza il risultato della funzione.
@@ -63,6 +62,16 @@ def _interview_service() -> GemmaInterview:
 	return GemmaInterview()
 
 
+def _rebuild_state(history: list[dict[str, str]], last_turn: HireReadyTurn) -> InterviewState:
+	# Il backend è stateless: lo stato del colloquio arriva dal client a ogni turno.
+	return InterviewState(
+		turn_id=last_turn.turn_id,
+		history=list(history),
+		is_closed=last_turn.is_final,
+		last_turn=last_turn,
+	)
+
+
 def interview_handle(
 	*,
 	history: list[dict[str, str]],
@@ -70,7 +79,7 @@ def interview_handle(
 	candidate_answer: str | None,
 	selected_position: str | None,
 	profile,
-) -> tuple[HireReadyTurn, InterviewRequest]:
+) -> tuple[HireReadyTurn, InterviewState]:
 	service = _interview_service()
 
 	if last_turn is None:
@@ -83,7 +92,7 @@ def interview_handle(
 	if not candidate_answer or not candidate_answer.strip():
 		raise ValueError("Nei turni successivi 'candidate_answer' è obbligatoria.")
 
-	state = InterviewRequest(history=history, last_turn=last_turn)
+	state = _rebuild_state(history, last_turn)
 	turn = service.next_turn(state=state, candidate_answer=candidate_answer)
 	return turn, state
 
@@ -96,7 +105,7 @@ def interview_service_start(*, position, candidate_profile):
 
 def interview_service_turn(*, history, last_turn, candidate_answer):
 	# Ricostruisce InterviewState da quanto arriva dal client (stateless)
-	state = InterviewRequest(history=history, last_turn=last_turn)
+	state = _rebuild_state(history, last_turn)
 	turn = _interview_service().next_turn(
 		state=state,
 		candidate_answer=candidate_answer,

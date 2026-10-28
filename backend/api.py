@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 import os
 import threading
 
@@ -8,6 +9,7 @@ from backend.controller import (
 	anonymization_state,
 	anonymize_cv,
 	extract_cv_text,
+	interview_handle,
 	is_anonymization_available,
 	parse_cv_for_interview,
 	warm_up_anonymization,
@@ -29,6 +31,9 @@ from backend.domain.models.interview_model import (
 
 
 
+
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -129,7 +134,7 @@ def parse_cv_for_interview_endpoint(request: CVParserRequest) -> CVParserRespons
 @app.post("/api/interview", response_model=InterviewResponse)
 def interview(request: InterviewRequest) -> InterviewResponse:
 	try:
-		turn, state = InterviewRequest(
+		turn, state = interview_handle(
 			history=request.history,
 			last_turn=request.last_turn,
 			candidate_answer=request.candidate_answer,
@@ -140,6 +145,12 @@ def interview(request: InterviewRequest) -> InterviewResponse:
 		raise HTTPException(status_code=422, detail=str(error)) from error
 	except RuntimeError as error:
 		raise HTTPException(status_code=502, detail=str(error)) from error
+	except Exception as error:
+		# Evita il 500 "muto": il frontend riceve comunque un detail leggibile.
+		logger.exception("Errore inatteso in /api/interview")
+		raise HTTPException(
+			status_code=500, detail=f"Errore interno: {type(error).__name__}: {error}"
+		) from error
 	return InterviewResponse(turn=turn, history=state.history, is_closed=state.is_closed)
 
 
