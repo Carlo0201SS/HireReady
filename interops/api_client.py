@@ -3,9 +3,10 @@
 import os
 import requests
 
-from backend.domain.models.interview_model import HireReadyTurn
+from backend.domain.models.interview_model import HireReadyTurn, IsMeaningful, EvaluationOfPreviousAnswer
 from backend.domain.models.cv_model import CVParsedProfile
-from backend.domain.models.api_model import InterviewResponse 
+from backend.domain.models.api_model import InterviewResponse
+
 
 
 
@@ -105,13 +106,13 @@ class HireReadyApiClient:
 	# ------------------------------------------------------------------
 	# Utility
 	# ------------------------------------------------------------------
-	@staticmethod
-	def is_interview_closed(turn: dict) -> bool:
-		"""Determina se un HireReadyTurn chiude il colloquio."""
-		if not turn:
-			return False
-		is_meaningful = turn.get("is_meaningful") or {}
-		return bool(turn.get("is_final") or is_meaningful.get("azione") == "blocca")
+	#@staticmethod
+	#def is_interview_closed(turn: dict) -> bool:
+	#	"""Determina se un HireReadyTurn chiude il colloquio."""
+	#	if not turn:
+	#		return False
+	#	is_meaningful = turn.get("is_meaningful") or {}
+	#	return bool(turn.get("is_final") or is_meaningful.get("azione") == "blocca")
 
 
 api_client = HireReadyApiClient()

@@ -7,11 +7,6 @@ from pydantic import BaseModel, Field, model_validator
 
 
 
-# ---------------------------------------------------------------------------
-# Enum / Literal types (utili anche fuori dai modelli)
-# ---------------------------------------------------------------------------
-Phase = Literal["presentazione", "cv", "tecnica", "finale"]
-Azione = Literal["prosegui", "invita_chiarezza", "blocca"]
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +24,7 @@ class IsMeaningful(BaseModel):
             "3 = derisoria/offensiva/intimidatoria."
         ),
     )
-    azione: Azione
+    azione: Literal["prosegui", "invita_chiarezza", "blocca"]
     motivazione: str
 
     @model_validator(mode="after")
@@ -57,7 +52,7 @@ class EvaluationOfPreviousAnswer(BaseModel):
     """Valutazione della risposta del candidato al turno precedente."""
 
     question_id: int
-    score: float = Field(..., ge=1, le=3)
+    score: float = Field(..., ge=1, le=3) # i tre puntini = campo required.
     pertinenza: float = Field(..., ge=1, le=3)
     comment: str
 
@@ -83,7 +78,7 @@ class HireReadyTurn(BaseModel):
             "(nessuna risposta da valutare)."
         ),
     )
-    phase: Phase
+    phase: Literal["presentazione", "cv", "tecnica", "finale"]
     is_final: bool
     is_meaningful: IsMeaningful
     evaluation_of_previous_answer: Optional[EvaluationOfPreviousAnswer] = None
