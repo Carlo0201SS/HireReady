@@ -3,7 +3,7 @@
 import os
 import requests
 
-from backend.domain.models.interview_model import HireReadyTurn, IsMeaningful, EvaluationOfPreviousAnswer
+from backend.domain.models.interview_model import HireReadyTurn
 from backend.domain.models.cv_model import CVParsedProfile
 from backend.domain.models.api_model import InterviewResponse
 

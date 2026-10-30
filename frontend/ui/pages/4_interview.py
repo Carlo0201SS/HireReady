@@ -3,6 +3,9 @@ import os
 from pathlib import Path
 
 from interops.api_client import *
+
+
+
 # ----------------------------------------------------------------------
 # CONFIGURAZIONE PAGINA
 # ----------------------------------------------------------------------
@@ -11,6 +14,8 @@ st.set_page_config(
     page_icon="💬",
     layout="wide",
 )
+
+
 
 # ----------------------------------------------------------------------
 # PARAMETRI REGOLABILI
@@ -110,6 +115,7 @@ st.markdown(
 # TITOLO CENTRALE
 # ----------------------------------------------------------------------
 st.markdown(f'<div class="titolo-centrale">{TITOLO}</div>', unsafe_allow_html=True)
+
 
 # ----------------------------------------------------------------------
 # RIGA: LOGO + BOX RISPOSTA LLM

@@ -39,13 +39,13 @@ class IsMeaningful(BaseModel):
 
 
 
-class EvaluationOfPreviousAnswer(BaseModel):
-    """Valutazione della risposta del candidato al turno precedente."""
-
-    question_id: int
-    score: float = Field(..., ge=1, le=3) # i tre puntini = campo required.
-    pertinenza: float = Field(..., ge=1, le=3)
-    comment: str
+#class EvaluationOfPreviousAnswer(BaseModel):
+#    """Valutazione della risposta del candidato al turno precedente."""
+#
+#    question_id: int
+#    score: float = Field(..., ge=1, le=3) # i tre puntini = campo required.
+#    pertinenza: float = Field(..., ge=1, le=3)
+#    comment: str
 
 
 class NextQuestion(BaseModel):
@@ -72,7 +72,7 @@ class HireReadyTurn(BaseModel):
     phase: Literal["presentazione", "cv", "tecnica", "finale"]
     is_final: bool
     is_meaningful: IsMeaningful | None
-    evaluation_of_previous_answer: EvaluationOfPreviousAnswer | None
+    #evaluation_of_previous_answer: EvaluationOfPreviousAnswer | None
     next_question: NextQuestion | None
 
     @model_validator(mode="after")

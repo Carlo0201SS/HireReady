@@ -7,10 +7,9 @@ from dataclasses import dataclass, field
 from pydantic import ValidationError
 
 from backend.domain.models.cv_model import CVParsedProfile
-from backend.domain.models.interview_model import (
-    HireReadyTurn,
-    EvaluationOfPreviousAnswer,
-)
+from backend.domain.models.interview_model import HireReadyTurn
+    
+
 from interops.lm_studio_client import LMStudioAPI, LMStudioUnavailableError
 
 
@@ -254,21 +253,11 @@ class GemmaInterview:
                 "is_final": True,
                 "phase": "finale",
                 "next_question": None,
-                "evaluation_of_previous_answer": (
-                    turn.evaluation_of_previous_answer
-                    if turn.evaluation_of_previous_answer is not None
-                    else EvaluationOfPreviousAnswer(
-                        question_id=turn.turn_id - 1 if turn.turn_id > 0 else 0,
-                        score=1.0,
-                        pertinenza=1.0,
-                        comment="Risposta non conforme alle regole di condotta.",
-                    )
-                ),
             }
         )
         # La property model_validator accetta solo questo formato (is_final=True + phase finale)
         return forced
-
+    
     # ------------------------------------------------------------------
     # Utility: messaggio finale da mostrare al candidato
     # ------------------------------------------------------------------
