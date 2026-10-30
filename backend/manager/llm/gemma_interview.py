@@ -29,6 +29,7 @@ Sei un intervistatore tecnico esperto e membro del team Risorse Umane. Conosci a
 
 # COMPITO
 Conduci un colloquio di lavoro con il candidato per la posizione indicata nella sezione "POSIZIONE PER CUI SI CANDIDA", tenendo conto del profilo in formato JSON nella sezione "PROFILO DEL CANDIDATO". Se il profilo non è del tutto allineato con la posizione, usa le sue esperienze e competenze come punto di partenza per capire quanto conosce le tecnologie e le attività richieste dal ruolo, e quanto potrebbe crescere.
+Se il candidato non è conforme alle richieste della posizione, blocca il colloquio tecnico alla radice.
 
 Significato dei campi del profilo:
 - "professional_summary": sintesi professionale del candidato
@@ -218,7 +219,7 @@ class GemmaInterview:
             )
 
         try:
-            content = json.loads(body)["choices"][0]["message"]["content"]
+            content = json.load(body)["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError, ValueError) as error:
             raise RuntimeError("LM Studio ha restituito una risposta inattesa.") from error
         if not isinstance(content, str):
@@ -233,6 +234,8 @@ class GemmaInterview:
             )
             raise RuntimeError(
                 f"Gemma ha restituito un turno non conforme allo schema nei campi: {paths}."
+                f"Dettaglio: {error.errors(include_input=True)}\n"
+                f"Content grezzo: {content!r}"
             ) from error
 
         # Aggiorna la history con la domanda posta dal modello (se presente)

@@ -84,7 +84,7 @@ URL_PATTERN = re.compile(
 )
 YEAR_PATTERN = re.compile(r"\s*(?:19\d{2}|20(?:[0-2]\d|30))(?:\s*[-–—/]\s*(?:19\d{2}|20(?:[0-2]\d|30)))*\s*")
 IGNORED_ENTITY_LABELS = frozenset(
-	{"ZIP", "ZIP_CODE", "ZIPCODE", "POSTAL_CODE", "POSTALCODE", "POSTCODE"}
+	{"ZIP", "ZIP_CODE", "ZIPCODE", "POSTAL_CODE", "POSTALCODE", "POSTCODE", "DOCID"}
 )
 
 
@@ -234,7 +234,7 @@ def download_model(destination: str | Path = DEFAULT_MODEL_DIR, force: bool = Fa
 	model_dir.mkdir(parents=True, exist_ok=True)
 
 	# metodo i huggingface che vuole il path corretto del modello da scaricare.
-	snapshot_download(repo_id=MODEL_REPOSITORY, local_dir=str(model_dir), force_download=force)
+	snapshot_download(repo_id=MODEL_REPOSITORY,cache_dir=str(model_dir), local_dir=str(model_dir), force_download=force)
 	
 	return model_dir
 

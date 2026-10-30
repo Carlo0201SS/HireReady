@@ -94,7 +94,7 @@ class HireReadyApiClient:
 		- Turno 0: passare `selected_position` + `profile`.
 		- Turni successivi: passare `history` + `last_turn` + `candidate_answer`.
 		"""
-		payload: dict = {"history": history or [], "last_turn": last_turn}
+		payload: dict = {"history": history or [], "last_turn": last_turn or None}
 		if candidate_answer is not None:
 			payload["candidate_answer"] = candidate_answer
 		if selected_position is not None:

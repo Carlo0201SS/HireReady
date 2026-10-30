@@ -15,34 +15,25 @@ from pydantic import BaseModel, Field, model_validator
 class IsMeaningful(BaseModel):
     """Valutazione di appropriatezza della risposta del candidato."""
 
-    inappropriatezza: int = Field(
-        ...,
-        ge=1,
-        le=3,
-        description=(
-            "1 = gentile e attinente; 2 = fuori contesto; "
-            "3 = derisoria/offensiva/intimidatoria."
-        ),
-    )
-    azione: Literal["prosegui", "invita_chiarezza", "blocca"]
+    azione: Literal["prosegui", "blocca"]
     motivazione: str
 
-    @model_validator(mode="after")
-    def _check_azione_coerente(self) -> "IsMeaningful":
+    #@model_validator(mode="after")
+    #def _check_azione_coerente(self) -> "IsMeaningful":
         # Riproduce i vincoli allOf/if-then dello schema JSON
-        mapping = {
-            1: "prosegui",
-            2: "invita_chiarezza",
-            3: "blocca",
-        }
-        atteso = mapping[self.inappropriatezza]
-        if self.azione != atteso:
-            raise ValueError(
-                f"azione '{self.azione}' non coerente con "
-                f"inappropriatezza={self.inappropriatezza} "
-                f"(atteso: '{atteso}')"
-            )
-        return self
+    #    mapping = {
+    #        1: "prosegui",
+    #        2: "invita_chiarezza",
+    #        3: "blocca",
+    #    }
+    #    atteso = mapping[self.inappropriatezza]
+    #    if self.azione != atteso:
+    #        raise ValueError(
+    #            f"azione '{self.azione}' non coerente con "
+    #            f"inappropriatezza={self.inappropriatezza} "
+    #            f"(atteso: '{atteso}')"
+    #        )
+    #    return self
 
 
 
@@ -80,7 +71,7 @@ class HireReadyTurn(BaseModel):
     )
     phase: Literal["presentazione", "cv", "tecnica", "finale"]
     is_final: bool
-    is_meaningful: IsMeaningful
+    is_meaningful: IsMeaningful 
     evaluation_of_previous_answer: Optional[EvaluationOfPreviousAnswer] = None
     next_question: Optional[NextQuestion] = None
 
