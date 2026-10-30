@@ -219,7 +219,7 @@ class GemmaInterview:
             )
 
         try:
-            content = json.load(body)["choices"][0]["message"]["content"]
+            content = json.loads(body)["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError, ValueError) as error:
             raise RuntimeError("LM Studio ha restituito una risposta inattesa.") from error
         if not isinstance(content, str):

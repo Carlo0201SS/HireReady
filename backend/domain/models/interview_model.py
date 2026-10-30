@@ -71,9 +71,9 @@ class HireReadyTurn(BaseModel):
     )
     phase: Literal["presentazione", "cv", "tecnica", "finale"]
     is_final: bool
-    is_meaningful: IsMeaningful 
-    evaluation_of_previous_answer: Optional[EvaluationOfPreviousAnswer] = None
-    next_question: Optional[NextQuestion] = None
+    is_meaningful: IsMeaningful | None
+    evaluation_of_previous_answer: EvaluationOfPreviousAnswer | None
+    next_question: NextQuestion | None
 
     @model_validator(mode="after")
     def _check_coerenza_finale(self) -> "HireReadyTurn":
