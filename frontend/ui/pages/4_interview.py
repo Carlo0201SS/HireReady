@@ -1,9 +1,8 @@
-import streamlit as st
-import os
 from pathlib import Path
 
-from interops.api_client import *
+import streamlit as st
 
+from interops.api_client import BackendApiError, api_client
 
 
 # ----------------------------------------------------------------------
@@ -16,28 +15,11 @@ st.set_page_config(
 )
 
 
-
 # ----------------------------------------------------------------------
 # PARAMETRI REGOLABILI
 # ----------------------------------------------------------------------
-FASE_CORRENTE = st.session_state.get("fase", 1)   # 1, 2 o 3
-TITOLO_FONT_SIZE = 42                              # <- regolabile (px)
-TITOLO_TEMPLATE = "Colloquio fase {fase}"          # <- regolabile
-MAX_FASI = 3
+TITOLO_FONT_SIZE = 42
 
-# Inizializzazione stato sessione
-if "fase" not in st.session_state:
-    st.session_state.fase = 1
-if "risposta_llm" not in st.session_state:
-    st.session_state.risposta_llm = (
-        "Ciao! Sono l'assistente virtuale. Quando sei pronto, "
-        "iniziamo con la prima domanda del colloquio."
-    )
-if "cronologia" not in st.session_state:
-    st.session_state.cronologia = []
-
-FASE_CORRENTE = st.session_state.fase
-TITOLO = TITOLO_TEMPLATE.format(fase=FASE_CORRENTE)
 
 # ----------------------------------------------------------------------
 # CSS PERSONALIZZATO
@@ -45,7 +27,6 @@ TITOLO = TITOLO_TEMPLATE.format(fase=FASE_CORRENTE)
 st.markdown(
     f"""
     <style>
-    /* Titolo centrale con dimensione parametrica */
     .titolo-centrale {{
         text-align: center;
         font-size: {TITOLO_FONT_SIZE}px;
@@ -55,8 +36,6 @@ st.markdown(
         margin-bottom: 40px;
         font-family: 'Segoe UI', sans-serif;
     }}
-
-    /* Logo "A" */
     .logo-box {{
         display: flex;
         align-items: center;
@@ -68,13 +47,11 @@ st.markdown(
         font-size: 48px;
         font-weight: bold;
         border-radius: 12px;
-        margin-left: 40px;      /* separazione dal margine sinistro */
+        margin-left: 40px;
         margin-top: 10px;
         box-shadow: 0 2px 6px rgba(0,0,0,0.2);
         font-family: 'Georgia', serif;
     }}
-
-    /* Box risposta LLM */
     .llm-box {{
         background-color: #eef3f9;
         border-left: 5px solid #4a7fb5;
@@ -85,9 +62,8 @@ st.markdown(
         min-height: 90px;
         margin-top: 10px;
         box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        white-space: pre-wrap;
     }}
-
-    /* Etichetta Rispondi */
     .label-rispondi {{
         font-size: 20px;
         font-weight: 600;
@@ -95,8 +71,6 @@ st.markdown(
         margin-top: 30px;
         margin-bottom: 8px;
     }}
-
-    /* Segnalino grafico fase */
     .fase-badge {{
         display: inline-block;
         padding: 6px 8px;
@@ -111,10 +85,46 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
+# ----------------------------------------------------------------------
+# GUARDIA: contesto presente?
+# ----------------------------------------------------------------------
+context = st.session_state.get("cv_interview_context")
+if not context:
+    st.info("Prima di iniziare il colloquio devi scegliere una posizione.")
+    st.page_link(
+        str(Path(__file__).resolve().with_name("3_choice_position.py")),
+        label="Vai alla scelta della posizione",
+    )
+    st.stop()
+
+
+# ----------------------------------------------------------------------
+# BOOTSTRAP COLLOQUIO (turno 0) — una sola volta
+# ----------------------------------------------------------------------
+if "interview_turn" not in st.session_state:
+    try:
+        response = api_client.interview(
+            selected_position=context["selected_position"],
+            profile=context["profile"],
+        )
+    except BackendApiError as error:
+        st.error(str(error))
+        st.stop()
+    st.session_state["interview_turn"] = response["turn"]
+    st.session_state["interview_history"] = response["history"]
+    st.session_state["interview_closed"] = response["is_closed"]
+
+
+current_turn = st.session_state["interview_turn"]
+is_closed = st.session_state.get("interview_closed", False)
+
+
 # ----------------------------------------------------------------------
 # TITOLO CENTRALE
 # ----------------------------------------------------------------------
-st.markdown(f'<div class="titolo-centrale">{TITOLO}</div>', unsafe_allow_html=True)
+titolo = f"Colloquio fase {current_turn.get('phase', '—')}"
+st.markdown(f'<div class="titolo-centrale">{titolo}</div>', unsafe_allow_html=True)
 
 
 # ----------------------------------------------------------------------
@@ -127,9 +137,10 @@ with col_logo:
 
 with col_llm:
     st.markdown(
-        f'<div class="llm-box">{st.session_state.risposta_llm}</div>',
+        f'<div class="llm-box">{api_client.turn_message(current_turn)}</div>',
         unsafe_allow_html=True,
     )
+
 
 # ----------------------------------------------------------------------
 # AREA RISPOSTA UTENTE
@@ -142,6 +153,7 @@ risposta_utente = st.text_area(
     height=140,
     label_visibility="collapsed",
     key="input_risposta",
+    disabled=is_closed,
 )
 
 
@@ -151,112 +163,56 @@ risposta_utente = st.text_area(
 col_segnalino, col_spacer, col_bottone = st.columns([2, 3, 1], gap="large")
 
 with col_segnalino:
-    valutazione = st.session_state.get("valutazione_llm", None)
-
-    # Nessuna valutazione ancora disponibile
-    if valutazione is None:
+    is_meaningful = current_turn.get("is_meaningful") or {}
+    if is_meaningful.get("azione") == "blocca":
+        st.markdown(
+            '<div class="fase-badge" style="background:#ffc9c9;">❌ Risposta non adeguata</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(is_meaningful.get("motivazione", "Nessuna motivazione fornita."))
+    elif current_turn.get("evaluation_of_previous_answer") is not None:
+        ev = current_turn["evaluation_of_previous_answer"]
+        st.markdown(
+            f'<div class="fase-badge" style="background:#c8f7c5;">'
+            f'✅ Valutazione: {ev.get("score", "—")}/3</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(ev.get("comment", ""))
+    else:
         st.markdown(
             '<div class="fase-badge">⏳ In attesa di valutazione…</div>',
             unsafe_allow_html=True,
         )
-    else:
-        stato = valutazione.get("valutazione", "").lower()
-
-        # ---------- CASO 1: RISPOSTA BUONA ----------
-        if stato == "buona":
-            img_ok = Path("assets") / "spunta_verde.png"
-            if img_ok.exists():
-                st.image(str(img_ok), width=50)
-            else:
-                st.markdown(
-                    '<div class="fase-badge" style="background:#c8f7c5;">✅ Risposta buona</div>',
-                    unsafe_allow_html=True,
-                )
-
-        # ---------- CASO 2: RISPOSTA CON DIFETTI ----------
-        elif stato == "difetti":
-            img_dif = Path("assets") / "emoji_pensante.png"
-            if img_dif.exists():
-                st.image(str(img_dif), width=50)
-            else:
-                st.markdown(
-                    '<div class="fase-badge" style="background:#ffe9a8;">🤔 Risposta con difetti</div>',
-                    unsafe_allow_html=True,
-                )
-
-            # Selectbox con l'elenco dei problemi individuati dal modello
-            problemi = valutazione.get("problemi", [])
-            if problemi:
-                st.selectbox(
-                    "Problema individuato:",
-                    options=problemi,
-                    key=f"problema_fase_{FASE_CORRENTE}",
-                )
-            else:
-                st.caption("Nessun dettaglio sui difetti fornito dal modello.")
-
-        # ---------- CASO 3: RISPOSTA NEGATIVA (etica) ----------
-        elif stato == "negativa":
-            img_neg = Path("assets") / "croce_rossa.png"
-            if img_neg.exists():
-                st.image(str(img_neg), width=50)
-            else:
-                st.markdown(
-                    '<div class="fase-badge" style="background:#ffc9c9;">❌ Risposta non adeguata</div>',
-                    unsafe_allow_html=True,
-                )
-
-            # Selectbox con la spiegazione dell'inadeguatezza etica
-            spiegazioni = valutazione.get("spiegazione", [])
-            if spiegazioni:
-                st.selectbox(
-                    "Motivazione:",
-                    options=spiegazioni,
-                    key=f"spiegazione_fase_{FASE_CORRENTE}",
-                )
-            else:
-                st.caption("Nessuna spiegazione fornita dal modello.")
-
-        # ---------- CASO FALLBACK ----------
-        else:
-            st.markdown(
-                f'<div class="fase-badge">⚠️ Stato non riconosciuto: {stato}</div>',
-                unsafe_allow_html=True,
-            )
 
 with col_bottone:
     st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
-    procedi = st.button("Procedi ➜", use_container_width=True, type="primary")
+    procedi = st.button(
+        "Procedi ➜",
+        use_container_width=True,
+        type="primary",
+        disabled=is_closed,
+    )
+
 
 # ----------------------------------------------------------------------
 # GESTIONE PULSANTE PROCEDI
 # ----------------------------------------------------------------------
-
-if "interview_turn" not in st.session_state:
-	context = st.session_state["cv_interview_context"]
-	response = api_client.interview(
-		selected_position=context["selected_position"],
-		profile=context["profile"],
-	)
-	st.session_state["interview_turn"] = response["turn"]
-	st.session_state["interview_history"] = response["history"]
-	st.session_state["interview_closed"] = response["is_closed"]
-
-# Ad ogni "Procedi"
-if procedi and risposta_utente.strip():
-	response = api_client.interview(
-		history=st.session_state["interview_history"],
-		last_turn=st.session_state["interview_turn"],
-		candidate_answer=risposta_utente.strip(),
-	)
-	st.session_state["interview_turn"] = response["turn"]
-	st.session_state["interview_history"] = response["history"]
-	st.session_state["interview_closed"] = response["is_closed"]
-	st.rerun()
-# ----------------------------------------------------------------------
-# (OPZIONALE) CRONOLOGIA IN ESPANSIONE
-# ----------------------------------------------------------------------
-if st.session_state.cronologia:
-    with st.expander("📜 Cronologia risposte"):
-        for i, item in enumerate(st.session_state.cronologia, 1):
-            st.write(f"**{i}. Fase {item['fase']}** — {item['risposta']}")
+if procedi:
+    if is_closed:
+        st.warning("Il colloquio è concluso.")
+    elif not risposta_utente.strip():
+        st.warning("Scrivi una risposta prima di procedere.")
+    else:
+        try:
+            response = api_client.interview(
+                history=st.session_state["interview_history"],
+                last_turn=st.session_state["interview_turn"],
+                candidate_answer=risposta_utente.strip(),
+            )
+        except BackendApiError as error:
+            st.error(str(error))
+        else:
+            st.session_state["interview_turn"] = response["turn"]
+            st.session_state["interview_history"] = response["history"]
+            st.session_state["interview_closed"] = response["is_closed"]
+            st.rerun()

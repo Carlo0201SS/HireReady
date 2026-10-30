@@ -8,9 +8,6 @@ from backend.domain.models.cv_model import CVParsedProfile
 from backend.domain.models.api_model import InterviewResponse
 
 
-
-
-
 class BackendApiError(RuntimeError):
 	pass
 
@@ -84,35 +81,74 @@ class HireReadyApiClient:
 		self,
 		*,
 		history: list[dict[str, str]] | None = None,
-		last_turn: HireReadyTurn | None = None,
+		last_turn: HireReadyTurn | dict | None = None,
 		candidate_answer: str | None = None,
 		selected_position: str | None = None,
-		profile: CVParsedProfile | None = None,
-	) -> InterviewResponse:
+		profile: CVParsedProfile | dict | None = None,
+	) -> dict:
 		"""Chiama POST /api/interview.
 
 		- Turno 0: passare `selected_position` + `profile`.
 		- Turni successivi: passare `history` + `last_turn` + `candidate_answer`.
 		"""
-		payload: dict = {"history": history or [], "last_turn": last_turn or None}
+		# requests non serializza Pydantic: normalizziamo a dict prima di inviare.
+		last_turn_payload = (
+			last_turn.model_dump() if isinstance(last_turn, HireReadyTurn) else last_turn
+		)
+		profile_payload = (
+			profile.model_dump() if isinstance(profile, CVParsedProfile) else profile
+		)
+
+		payload: dict = {"history": history or [], "last_turn": last_turn_payload}
 		if candidate_answer is not None:
 			payload["candidate_answer"] = candidate_answer
 		if selected_position is not None:
 			payload["selected_position"] = selected_position
-		if profile is not None:
-			payload["profile"] = profile
+		if profile_payload is not None:
+			payload["profile"] = profile_payload
 		return self._request("POST", "/api/interview", json=payload)
 
 	# ------------------------------------------------------------------
 	# Utility
 	# ------------------------------------------------------------------
-	#@staticmethod
-	#def is_interview_closed(turn: dict) -> bool:
-	#	"""Determina se un HireReadyTurn chiude il colloquio."""
-	#	if not turn:
-	#		return False
-	#	is_meaningful = turn.get("is_meaningful") or {}
-	#	return bool(turn.get("is_final") or is_meaningful.get("azione") == "blocca")
+	@staticmethod
+	def is_interview_closed(turn: dict) -> bool:
+		"""Determina se un HireReadyTurn chiude il colloquio."""
+		if not turn:
+			return False
+		is_meaningful = turn.get("is_meaningful") or {}
+		return bool(turn.get("is_final") or is_meaningful.get("azione") == "blocca")
+
+	@staticmethod
+	def turn_message(turn: dict | None) -> str:
+		"""Testo da mostrare per un HireReadyTurn serializzato.
+
+		- Blocco per linguaggio inappropriato → messaggio + motivazione.
+		- Turno finale → messaggio di chiusura cortese.
+		- Turno normale → `next_question.text`.
+		- Nessun turno → messaggio di attesa.
+		"""
+		if not turn:
+			return "In attesa dell'inizio del colloquio…"
+
+		is_meaningful = turn.get("is_meaningful") or {}
+		if is_meaningful.get("azione") == "blocca":
+			return (
+				"Il colloquio è terminato.\n\n"
+				f"Motivo: {is_meaningful.get('motivazione', 'motivo non specificato')}"
+			)
+
+		if turn.get("is_final"):
+			return (
+				"Grazie per il colloquio. La valutazione finale è disponibile "
+				"presso il team di selezione."
+			)
+
+		next_question = turn.get("next_question")
+		if next_question and next_question.get("text"):
+			return next_question["text"]
+
+		return "In attesa della prossima domanda…"
 
 
 api_client = HireReadyApiClient()
