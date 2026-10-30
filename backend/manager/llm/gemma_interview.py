@@ -52,19 +52,27 @@ Segui queste fasi in ordine:
 - Non mostrare né citare al candidato il JSON del profilo.
 - Mantieni un tono professionale, cordiale e chiaro.
 - Se una risposta è vaga o incompleta, puoi fare una breve domanda di approfondimento prima di passare alla domanda successiva.
-- Conduci il colloquio in italiano.
+- Conduci il colloquio in italiano corretto.
+- Parli tu, l'intervistatore, rivolgendoti direttamente al candidato con il "tu" (seconda persona singolare): scrivi "presentati", "raccontami", mai "presentarmi" o "mi prego".
 
 # LINGUAGGIO INAPPROPRIATO
 Non sono ammessi parolacce né linguaggio volgare. Se il candidato li usa anche solo una volta, chiudi subito il colloquio con un messaggio breve e professionale che ne spieghi il motivo, e non fare altre domande.
 
 # INIZIO
-Comincia presentandoti e chiedendo al candidato di presentarsi."""
+Comincia con una frase breve in cui ti presenti come intervistatore, poi chiedi al candidato di presentarsi.
+Esempio: «Ciao, sono l'intervistatore di HireReady. Presentati brevemente e raccontami il tuo percorso professionale.»"""
 
 
 FINAL_MESSAGE = (
     "Il colloquio è terminato a causa dell'uso di un linguaggio non appropriato. "
     "Ti ringrazio per la partecipazione."
 )
+
+
+def _is_blocked(turn: HireReadyTurn) -> bool:
+    """True se il turno chiude il colloquio per linguaggio inappropriato.
+    is_meaningful è nullable (es. turno 0 o quando il modello non lo valorizza)."""
+    return turn.is_meaningful is not None and turn.is_meaningful.azione == "blocca"
 
 
 # ---------------------------------------------------------------------------
@@ -140,8 +148,9 @@ class GemmaInterview:
 
         # Turno 0: chiediamo al modello di presentarsi e iniziare
         user_bootstrap = (
-            "Inizia il colloquio: presentati brevemente e chiedi al candidato "
-            "di presentarsi."
+            "Inizia il colloquio. Rivolgiti al candidato dandogli del tu: "
+            "presentati in una frase come intervistatore e chiedigli di "
+            "presentarsi e raccontare il suo percorso professionale."
         )
         turn = self._call_llm(state, user_bootstrap)
         state.last_turn = turn
@@ -171,9 +180,9 @@ class GemmaInterview:
         state.last_turn = turn
 
         # Chiusura per volgarità o per fine colloquio
-        if turn.is_final or turn.is_meaningful.azione == "blocca":
+        if turn.is_final or _is_blocked(turn):
             state.is_closed = True
-            if turn.is_meaningful.azione == "blocca":
+            if _is_blocked(turn):
                 # Forziamo il messaggio di cortesia in italiano
                 turn = self._force_close_turn(turn)
                 state.last_turn = turn
@@ -203,9 +212,54 @@ class GemmaInterview:
             },
         }
 
+        # Un solo retry: se Gemma viola un vincolo che lo schema JSON non puo'
+        # esprimere (es. is_final=False con next_question=null), le rimandiamo
+        # l'errore di validazione e le chiediamo di correggersi.
+        messages = list(history)
+        for attempt in range(2):
+            content = self._request_turn(messages, response_format)
+            try:
+                turn = HireReadyTurn.model_validate_json(content)
+                break
+            except ValidationError as error:
+                if attempt == 0:
+                    messages = messages + [
+                        {"role": "assistant", "content": content},
+                        {
+                            "role": "user",
+                            "content": (
+                                "Il JSON precedente non rispetta i vincoli: "
+                                + "; ".join(e["msg"] for e in error.errors())
+                                + ". Rigenera il turno correggendo l'errore. "
+                                "Se is_final=false, next_question deve contenere "
+                                "la prossima domanda (id e text)."
+                            ),
+                        },
+                    ]
+                    continue
+                paths = ", ".join(
+                    ".".join(str(p) for p in issue["loc"]) or "$"
+                    for issue in error.errors(include_input=False)
+                )
+                raise RuntimeError(
+                    f"Gemma ha restituito un turno non conforme allo schema nei campi: {paths}."
+                    f"Dettaglio: {error.errors(include_input=True)}\n"
+                    f"Content grezzo: {content!r}"
+                ) from error
+
+        # Aggiorna la history con la domanda posta dal modello (se presente)
+        if turn.next_question is not None:
+            history.append(
+                {"role": "assistant", "content": turn.next_question.text}
+            )
+        state.history = history
+        return turn
+
+    def _request_turn(self, messages, response_format) -> str:
+        """Chiama LM Studio e restituisce il content testuale della risposta."""
         try:
             status_code, body = self._lm_studio.chat_completions(
-                self.model, history, response_format
+                self.model, messages, response_format
             )
         except LMStudioUnavailableError as error:
             raise RuntimeError(str(error)) from error
@@ -223,27 +277,7 @@ class GemmaInterview:
             raise RuntimeError("LM Studio ha restituito una risposta inattesa.") from error
         if not isinstance(content, str):
             raise RuntimeError("Gemma non ha restituito un JSON testuale.")
-
-        try:
-            turn = HireReadyTurn.model_validate_json(content)
-        except ValidationError as error:
-            paths = ", ".join(
-                ".".join(str(p) for p in issue["loc"]) or "$"
-                for issue in error.errors(include_input=False)
-            )
-            raise RuntimeError(
-                f"Gemma ha restituito un turno non conforme allo schema nei campi: {paths}."
-                f"Dettaglio: {error.errors(include_input=True)}\n"
-                f"Content grezzo: {content!r}"
-            ) from error
-
-        # Aggiorna la history con la domanda posta dal modello (se presente)
-        if turn.next_question is not None:
-            history.append(
-                {"role": "assistant", "content": turn.next_question.text}
-            )
-        state.history = history
-        return turn
+        return content
 
     @staticmethod
     def _force_close_turn(turn: HireReadyTurn) -> HireReadyTurn:
@@ -264,7 +298,7 @@ class GemmaInterview:
     @staticmethod
     def closing_message(turn: HireReadyTurn) -> str:
         """Restituisce il testo finale che il frontend deve mostrare."""
-        if turn.is_meaningful.azione == "blocca":
+        if _is_blocked(turn):
             return FINAL_MESSAGE
         if turn.is_final:
             return (

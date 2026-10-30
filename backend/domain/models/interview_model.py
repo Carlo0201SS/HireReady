@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class StrictModel(BaseModel):
+    """Vieta campi extra: lo schema JSON avra' additionalProperties=false,
+    cosi' il decoding vincolato di LM Studio non puo' inventare chiavi."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 
@@ -12,7 +19,7 @@ from pydantic import BaseModel, Field, model_validator
 # ---------------------------------------------------------------------------
 # Sotto-modelli
 # ---------------------------------------------------------------------------
-class IsMeaningful(BaseModel):
+class IsMeaningful(StrictModel):
     """Valutazione di appropriatezza della risposta del candidato."""
 
     azione: Literal["prosegui", "blocca"]
@@ -48,7 +55,7 @@ class IsMeaningful(BaseModel):
 #    comment: str
 
 
-class NextQuestion(BaseModel):
+class NextQuestion(StrictModel):
     """Prossima domanda da porre al candidato."""
 
     id: int = Field(..., ge=1, description="Numero progressivo della domanda.")
@@ -58,7 +65,7 @@ class NextQuestion(BaseModel):
 # ---------------------------------------------------------------------------
 # Modello principale
 # ---------------------------------------------------------------------------
-class HireReadyTurn(BaseModel):
+class HireReadyTurn(StrictModel):
     """Un singolo turno del colloquio HireReady."""
 
     turn_id: int = Field(
