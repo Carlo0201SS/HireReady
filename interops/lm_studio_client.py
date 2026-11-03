@@ -67,8 +67,16 @@ class LMStudioAPI:
         model: str,
         messages: List[Dict[str, str]],
         response_format: Dict[str, Any] | None = None,
+        temperature: float = 0.2,
     ) -> Tuple[int, str]:
-        payload: Dict[str, Any] = {'model': model, 'messages': messages}
+        if not 0.0 <= temperature <= 1.0:
+            raise ValueError("temperature deve essere compresa tra 0 e 1.")
+
+        payload: Dict[str, Any] = {
+            'model': model,
+            'messages': messages,
+            'temperature': temperature,
+        }
         if response_format is not None:
             payload['response_format'] = response_format
         return self._send(

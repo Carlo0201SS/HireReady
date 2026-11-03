@@ -20,8 +20,8 @@ st.set_page_config(
 # FASI DEL COLLOQUIO (allineate a HireReadyTurn.phase)
 # ----------------------------------------------------------------------
 FASI = {
-    "presentazione": (1, "Presentazione"),
-    "cv": (2, "Esperienze e CV"),
+    "cv": (1, "Esperienze e CV"),
+    "presentazione": (2, "Presentazione"),
     "tecnica": (3, "Domande tecniche"),
     "finale": (4, "Chiusura"),
 }

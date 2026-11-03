@@ -31,10 +31,6 @@ upload_page = st.Page(
 	title="Carica CV",
 	default=True,
 )
-anonymization_page = st.Page(
-	str(FRONTEND_DIR / "ui" / "pages" / "2_anonymization.py"),
-	title="Anonimizzazione",
-)
 position_page = st.Page(
 	str(FRONTEND_DIR / "ui" / "pages" / "3_choice_position.py"),
 	title="Posizione",
@@ -43,5 +39,5 @@ interview_page = st.Page(
 	str(FRONTEND_DIR / "ui" / "pages" / "4_interview.py"),
 	title="Colloquio",
 )
-navigation = st.navigation([upload_page, anonymization_page, position_page, interview_page], position="hidden")
+navigation = st.navigation([upload_page, position_page, interview_page], position="hidden")
 navigation.run()

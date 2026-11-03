@@ -86,6 +86,10 @@ class GemmaCVParserTests(unittest.TestCase):
 
 		self.assertEqual(profile.technical_skills, ["React", "TypeScript"])
 		model, messages, response_format = lm_studio.chat_completions.call_args.args
+		self.assertEqual(
+			lm_studio.chat_completions.call_args.kwargs["temperature"],
+			0.2,
+		)
 		self.assertEqual(model, "google/gemma-4-e2b")
 		self.assertIn("CV [EMAIL]", messages[1]["content"])
 		self.assertIn("Sviluppatore web React", messages[1]["content"])
@@ -127,7 +131,33 @@ class LMStudioAPITests(unittest.TestCase):
 		self.assertEqual(args, ("POST", "http://127.0.0.1:1234/v1/chat/completions"))
 		self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-key")
 		self.assertEqual(kwargs["json"]["response_format"], {"type": "json_schema"})
+		self.assertEqual(kwargs["json"]["temperature"], 0.2)
 		self.assertEqual(kwargs["timeout"], 5)
+
+	@patch("interops.lm_studio_client.requests.request")
+	def test_chat_completions_accepts_adjustable_temperature(self, request):
+		request.return_value = Mock(status_code=200, text="{}")
+		api = LMStudioAPI("http://127.0.0.1:1234", "test-key")
+
+		api.chat_completions(
+			"m",
+			[{"role": "user", "content": "ciao"}],
+			temperature=0.7,
+		)
+
+		self.assertEqual(request.call_args.kwargs["json"]["temperature"], 0.7)
+
+	def test_chat_completions_rejects_temperature_outside_range(self):
+		api = LMStudioAPI("http://127.0.0.1:1234", "test-key")
+
+		for temperature in (-0.1, 1.1):
+			with self.subTest(temperature=temperature):
+				with self.assertRaisesRegex(ValueError, "tra 0 e 1"):
+					api.chat_completions(
+						"m",
+						[{"role": "user", "content": "ciao"}],
+						temperature=temperature,
+					)
 
 	@patch("interops.lm_studio_client.requests.request", side_effect=requests.ConnectionError)
 	def test_wraps_network_errors(self, request):

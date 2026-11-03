@@ -1,8 +1,10 @@
 # backend/manager/llm/gemma_interview.py
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -16,7 +18,8 @@ from interops.lm_studio_client import LMStudioAPI, LMStudioUnavailableError
 # ---------------------------------------------------------------------------
 # System prompt (il testo fornito nel file originale, pulito dalle graffe JS)
 # ---------------------------------------------------------------------------
-DOMANDE_TECNICHE = 5
+DOMANDE_CV = 3
+DOMANDE_TECNICHE = 7
 SYSTEM_PROMPT_TEMPLATE = """# RUOLO
 Sei un intervistatore tecnico esperto e membro del team Risorse Umane. Conosci a fondo il mondo IT e ICT, in particolare le posizioni di sviluppo web con qualsiasi tecnologia presente sul mercato. Sei esperto anche di AI e delle posizioni di ML Engineer e AI Developer.
 
@@ -25,6 +28,9 @@ Sei un intervistatore tecnico esperto e membro del team Risorse Umane. Conosci a
 
 # PROFILO DEL CANDIDATO
 {candidate_profile}
+
+# NOME.
+Tu sei l'intervistatore di nome HireReady. Quando dev riferire a te stessa userai questo nome.
 
 # COMPITO
 Conduci un colloquio di lavoro con il candidato per la posizione indicata nella sezione "POSIZIONE PER CUI SI CANDIDA", tenendo conto del profilo in formato JSON nella sezione "PROFILO DEL CANDIDATO". Se il profilo non è del tutto allineato con la posizione, usa le sue esperienze e competenze come punto di partenza per capire quanto conosce le tecnologie e le attività richieste dal ruolo, e quanto potrebbe crescere.
@@ -38,30 +44,30 @@ Significato dei campi del profilo:
 - "interview_focus": aree su cui concentrare il colloquio
 
 # STRUTTURA DEL COLLOQUIO
-Segui queste fasi in ordine:
-1. Presentazione: presentati brevemente e chiedi al candidato di presentarsi.
-2. Esperienze lavorative: approfondisci le esperienze in "relevant_experience" e le aree in "interview_focus" (attività svolte, strumenti e tecnologie usate, risultati ottenuti).
-3. Domande tecniche: fai {num_domande_tecniche} domande tecniche, una alla volta, sulle competenze richieste dalla posizione. Parti dai concetti di base e aumenta gradualmente la difficoltà. Dove ha senso, collega le domande alle competenze in "technical_skills".
-4. Valutazione finale: dai una valutazione chiara delle capacità del candidato. Indica punti di forza, lacune rispetto al ruolo, livello stimato di adeguatezza alla posizione e suggerimenti concreti per colmare le lacune.
+Il turno corrente è indicato da turn_id. Rispetta rigorosamente questa tabella:
+- turn_id 0, 1 e 2: phase="cv". Fai esattamente {num_domande_cv} domande complessive, una per turno, sulle esperienze, competenze e aree di approfondimento del CV.
+- turn_id 3: phase="presentazione". Chiedi al candidato una breve presentazione personale e del proprio percorso.
+- turn_id da 4 a 10: phase="tecnica". Fai esattamente {num_domande_tecniche} domande tecniche, una per turno, sulle competenze richieste dalla posizione. Parti dai concetti di base e aumenta gradualmente la difficoltà; collega le domande alle competenze dichiarate quando pertinente.
+- turn_id 11: phase="finale" e is_final=true. Concludi il colloquio senza porre un'altra domanda.
+Per tutti i turni da 0 a 10, imposta is_final=false e phase secondo la tabella. Non saltare turni, non ripetere turni e non aggiungere domande di approfondimento: se una risposta è vaga o incompleta, prosegui con la domanda prevista per il turno successivo e considera la lacuna nella valutazione finale. L'unica eccezione alla conclusione al turno 11 è la chiusura per linguaggio inappropriato descritta sotto.
 
 # REGOLE DI INTERAZIONE
 - Procedi un passo alla volta: fai una sola domanda per messaggio e aspetta sempre la risposta del candidato prima di andare avanti.
-- Non anticipare le fasi successive e non rispondere al posto del candidato.
-- Non dare la valutazione finale prima di aver completato tutte le fasi.
+- Non anticipare le fasi successive, non saltare la sequenza dei turn_id e non rispondere al posto del candidato.
+- Non dare la valutazione finale prima del turno 11.
 - Non mostrare né citare al candidato il JSON del profilo.
 - Mantieni un tono professionale, cordiale e chiaro.
-- Se una risposta è vaga o incompleta, puoi fare una breve domanda di approfondimento prima di passare alla domanda successiva.
 - Conduci il colloquio in italiano corretto.
 - Parli tu, l'intervistatore, rivolgendoti direttamente al candidato con il "tu" (seconda persona singolare): scrivi "presentati", "raccontami", mai "presentarmi" o "mi prego".
 
 # LINGUAGGIO INAPPROPRIATO
-Imposta is_meaningful.azione="blocca" esclusivamente se il candidato usa volgarità o rivolge insulti offensivi a qualcuno. In tal caso chiudi subito il colloquio. Per ogni altro caso imposta is_meaningful.azione="prosegui": non bloccare per risposte errate, vaghe, incomplete, non pertinenti, per lacune tecniche o perché il profilo non è allineato alla posizione. In questi casi fai una domanda di approfondimento oppure continua il colloquio e valuta le lacune nella valutazione finale.
-Considera il contesto: non bloccare per termini tecnici, citazioni o riferimenti neutrali a parole offensive, né per critiche professionali non volgari. Se non è chiaro che il candidato abbia effettivamente usato volgarità o rivolto un insulto, prosegui.
-is_final indica solo la normale conclusione del colloquio dopo aver completato le fasi previste; non usarlo per terminare anticipatamente a causa della qualità o pertinenza di una risposta.
+is_meaningful può essere null esclusivamente al turno 0, perché non è ancora stata ricevuta una risposta del candidato. Da turn_id 1 in poi è obbligatorio restituire l'oggetto is_meaningful con azione valorizzata esattamente a "prosegui" oppure "blocca"; non omettere il campo e non usare null. Se non è chiaro che il candidato abbia effettivamente usato volgarità o rivolto un insulto, scegli "prosegui".
+Imposta is_meaningful.azione="blocca" esclusivamente se il candidato usa volgarità o rivolge insulti offensivi a qualcuno. In tal caso chiudi subito il colloquio. Per ogni altro caso imposta is_meaningful.azione="prosegui": non bloccare per risposte errate, vaghe, incomplete, non pertinenti, per lacune tecniche o perché il profilo non è allineato alla posizione. In questi casi continua il colloquio e valuta le lacune nella valutazione finale.
+Considera il contesto: non bloccare per termini tecnici, citazioni o riferimenti neutrali a parole offensive, né per critiche professionali non volgari.
+Per la conclusione normale, is_final=true esclusivamente al turno 11. Non impostare is_final=true a causa della qualità o pertinenza di una risposta.
 
 # INIZIO
-Comincia con una frase breve in cui ti presenti come intervistatore, poi chiedi al candidato di presentarsi.
-Esempio: «Ciao, sono l'intervistatore di HireReady. Presentati brevemente e raccontami il tuo percorso professionale.»"""
+Al turno 0, presentati brevemente come intervistatore e poni una domanda relativa al CV. Non chiedere ancora al candidato di presentarsi: la sua presentazione è prevista al turno 3."""
 
 
 FINAL_MESSAGE = (
@@ -69,11 +75,79 @@ FINAL_MESSAGE = (
     "Ti ringrazio per la partecipazione."
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _is_blocked(turn: HireReadyTurn) -> bool:
-    """True se il turno chiude il colloquio per linguaggio inappropriato.
-    is_meaningful è nullable (es. turno 0 o quando il modello non lo valorizza)."""
-    return turn.is_meaningful.azione == "blocca"
+    """True se il turno chiude il colloquio per linguaggio inappropriato."""
+    return (
+        turn.is_meaningful is not None
+        and turn.is_meaningful.azione == "blocca"
+    )
+
+
+def _ensure_meaningful_classification(
+    payload: Any,
+    turn_id: int,
+) -> Any:
+    """Default to continuing when a non-initial turn has no classification."""
+    if (
+        turn_id > 0
+        and isinstance(payload, dict)
+        and payload.get("is_meaningful") is None
+    ):
+        logger.warning(
+            "Gemma omitted is_meaningful at turn_id=%s; defaulting to 'prosegui'.",
+            turn_id,
+        )
+        payload = dict(payload)
+        payload["is_meaningful"] = {
+            "azione": "prosegui",
+            "motivazione": (
+                "Classificazione non disponibile; si prosegue perché non è "
+                "stato identificato con certezza un linguaggio offensivo."
+            ),
+        }
+    return payload
+
+
+def _validate_turn_payload(content: str, turn_id: int) -> HireReadyTurn:
+    context = {"expected_turn_id": turn_id}
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        return HireReadyTurn.model_validate_json(content, context=context)
+
+    payload = _ensure_meaningful_classification(payload, turn_id)
+    return HireReadyTurn.model_validate(payload, context=context)
+
+
+def _response_schema_for_turn(turn_id: int) -> dict:
+    """Specializza lo schema sul turno atteso per vincolare l'output del modello."""
+    phase = HireReadyTurn.expected_phase(turn_id)
+    schema = HireReadyTurn.model_json_schema()
+    schema["properties"]["turn_id"]["const"] = turn_id
+    schema["properties"]["phase"]["const"] = phase
+    schema["properties"]["is_final"]["const"] = turn_id == 11
+
+    if turn_id > 0:
+        meaningful_schema = schema["properties"]["is_meaningful"]
+        meaningful_schema["anyOf"] = [
+            variant
+            for variant in meaningful_schema["anyOf"]
+            if variant.get("type") != "null"
+        ]
+
+    if turn_id == 11:
+        schema["properties"]["next_question"] = {"type": "null"}
+    else:
+        question_schema = schema["properties"]["next_question"]
+        question_schema["anyOf"] = [
+            variant
+            for variant in question_schema["anyOf"]
+            if variant.get("type") != "null"
+        ]
+    return schema
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +199,7 @@ class GemmaInterview:
         return SYSTEM_PROMPT_TEMPLATE.format(
             position=position,
             candidate_profile=profile_json,
+            num_domande_cv=DOMANDE_CV,
             num_domande_tecniche=DOMANDE_TECNICHE,
         )
 
@@ -137,7 +212,7 @@ class GemmaInterview:
         position: str,
         candidate_profile: CVParsedProfile,
     ) -> tuple[HireReadyTurn, InterviewState]:
-        """Avvia un nuovo colloquio: turno 0 con presentazione."""
+        """Avvia un nuovo colloquio: turno 0 della fase CV."""
         if not position.strip():
             raise ValueError("La posizione selezionata è vuota.")
 
@@ -147,11 +222,11 @@ class GemmaInterview:
             history=[{"role": "system", "content": system_prompt}],
         )
 
-        # Turno 0: chiediamo al modello di presentarsi e iniziare
+        # Turno 0: presentazione breve dell'intervistatore e prima domanda CV.
         user_bootstrap = (
-            "Inizia il colloquio. Rivolgiti al candidato dandogli del tu: "
-            "presentati in una frase come intervistatore e chiedigli di "
-            "presentarsi e raccontare il suo percorso professionale."
+            "Inizia il colloquio. Rivolgiti al candidato dandogli del tu, "
+            "presentati brevemente e poni la prima domanda sulla sua "
+            "esperienza professionale descritta nel CV."
         )
         turn = self._call_llm(state, user_bootstrap)
         state.last_turn = turn
@@ -208,18 +283,17 @@ class GemmaInterview:
             "json_schema": {
                 "name": "HireReadyTurn",
                 "strict": True,
-                "schema": HireReadyTurn.model_json_schema(),
+                "schema": _response_schema_for_turn(state.turn_id),
             },
         }
 
-        # Un solo retry: se Gemma viola un vincolo che lo schema JSON non puo'
-        # esprimere (es. is_final=False con next_question=null), le rimandiamo
-        # l'errore di validazione e le chiediamo di correggersi.
+        # Un solo retry per correggere eventuali violazioni dello schema o dei
+        # vincoli di coerenza del turno.
         messages = list(history)
         for attempt in range(2):
             content = self._request_turn(messages, response_format)
             try:
-                turn = HireReadyTurn.model_validate_json(content)
+                turn = _validate_turn_payload(content, state.turn_id)
                 break
             except ValidationError as error:
                 if attempt == 0:
@@ -232,7 +306,9 @@ class GemmaInterview:
                                 + "; ".join(e["msg"] for e in error.errors())
                                 + ". Rigenera il turno correggendo l'errore. "
                                 "Se is_final=false, next_question deve contenere "
-                                "la prossima domanda (id e text)."
+                                "la prossima domanda (id e text). "
+                                "Da turn_id 1 in poi is_meaningful è obbligatorio "
+                                "e deve avere azione 'prosegui' o 'blocca', mai null."
                             ),
                         },
                     ]
@@ -259,7 +335,10 @@ class GemmaInterview:
         """Chiama LM Studio e restituisce il content testuale della risposta."""
         try:
             status_code, body = self._lm_studio.chat_completions(
-                self.model, messages, response_format
+                self.model,
+                messages,
+                response_format,
+                temperature=0.2,
             )
         except LMStudioUnavailableError as error:
             raise RuntimeError(str(error)) from error

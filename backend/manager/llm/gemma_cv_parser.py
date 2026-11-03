@@ -54,7 +54,12 @@ class GemmaCVParser:
 		}
 
 		try:
-			status_code, body = self._lm_studio.chat_completions(self.model, messages, response_format)
+			status_code, body = self._lm_studio.chat_completions(
+				self.model,
+				messages,
+				response_format,
+				temperature=0.2,
+			)
 		except LMStudioUnavailableError as error:
 			raise RuntimeError(str(error)) from error
 
