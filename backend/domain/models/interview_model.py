@@ -20,10 +20,20 @@ class StrictModel(BaseModel):
 # Sotto-modelli
 # ---------------------------------------------------------------------------
 class IsMeaningful(StrictModel):
-    """Valutazione di appropriatezza della risposta del candidato."""
+    """Classificazione del linguaggio usato dal candidato."""
 
-    azione: Literal["prosegui", "blocca"]
-    motivazione: str
+    azione: Literal["prosegui", "blocca"] = Field(
+        description=(
+            "'blocca' esclusivamente se il candidato usa volgarità o insulti "
+            "diretti; per qualsiasi altro contenuto usare 'prosegui'."
+        )
+    )
+    motivazione: str = Field(
+        description=(
+            "Spiega brevemente la presenza di volgarità o insulti solo se "
+            "azione='blocca'; altrimenti indica che il linguaggio è appropriato."
+        )
+    )
 
     #@model_validator(mode="after")
     #def _check_azione_coerente(self) -> "IsMeaningful":
@@ -77,7 +87,12 @@ class HireReadyTurn(StrictModel):
         ),
     )
     phase: Literal["presentazione", "cv", "tecnica", "finale"]
-    is_final: bool
+    is_final: bool = Field(
+        description=(
+            "True solo quando il colloquio è terminato secondo le sue fasi; "
+            "non usarlo per risposte errate, vaghe o non pertinenti."
+        )
+    )
     is_meaningful: IsMeaningful | None
     #evaluation_of_previous_answer: EvaluationOfPreviousAnswer | None
     next_question: NextQuestion | None
@@ -105,5 +120,4 @@ class HireReadyTurn(StrictModel):
                     "Se is_final=False, next_question è obbligatoria."
                 )
         return self
-
 

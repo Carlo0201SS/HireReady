@@ -28,7 +28,6 @@ Sei un intervistatore tecnico esperto e membro del team Risorse Umane. Conosci a
 
 # COMPITO
 Conduci un colloquio di lavoro con il candidato per la posizione indicata nella sezione "POSIZIONE PER CUI SI CANDIDA", tenendo conto del profilo in formato JSON nella sezione "PROFILO DEL CANDIDATO". Se il profilo non è del tutto allineato con la posizione, usa le sue esperienze e competenze come punto di partenza per capire quanto conosce le tecnologie e le attività richieste dal ruolo, e quanto potrebbe crescere.
-Se il candidato non è conforme alle richieste della posizione, blocca il colloquio tecnico alla radice.
 
 Significato dei campi del profilo:
 - "professional_summary": sintesi professionale del candidato
@@ -56,7 +55,9 @@ Segui queste fasi in ordine:
 - Parli tu, l'intervistatore, rivolgendoti direttamente al candidato con il "tu" (seconda persona singolare): scrivi "presentati", "raccontami", mai "presentarmi" o "mi prego".
 
 # LINGUAGGIO INAPPROPRIATO
-Non sono ammessi parolacce né linguaggio volgare. Se il candidato li usa anche solo una volta, chiudi subito il colloquio con un messaggio breve e professionale che ne spieghi il motivo, e non fare altre domande.
+Imposta is_meaningful.azione="blocca" esclusivamente se il candidato usa volgarità o rivolge insulti offensivi a qualcuno. In tal caso chiudi subito il colloquio. Per ogni altro caso imposta is_meaningful.azione="prosegui": non bloccare per risposte errate, vaghe, incomplete, non pertinenti, per lacune tecniche o perché il profilo non è allineato alla posizione. In questi casi fai una domanda di approfondimento oppure continua il colloquio e valuta le lacune nella valutazione finale.
+Considera il contesto: non bloccare per termini tecnici, citazioni o riferimenti neutrali a parole offensive, né per critiche professionali non volgari. Se non è chiaro che il candidato abbia effettivamente usato volgarità o rivolto un insulto, prosegui.
+is_final indica solo la normale conclusione del colloquio dopo aver completato le fasi previste; non usarlo per terminare anticipatamente a causa della qualità o pertinenza di una risposta.
 
 # INIZIO
 Comincia con una frase breve in cui ti presenti come intervistatore, poi chiedi al candidato di presentarsi.
@@ -72,7 +73,7 @@ FINAL_MESSAGE = (
 def _is_blocked(turn: HireReadyTurn) -> bool:
     """True se il turno chiude il colloquio per linguaggio inappropriato.
     is_meaningful è nullable (es. turno 0 o quando il modello non lo valorizza)."""
-    return turn.is_meaningful is not None and turn.is_meaningful.azione == "blocca"
+    return turn.is_meaningful.azione == "blocca"
 
 
 # ---------------------------------------------------------------------------
@@ -180,12 +181,11 @@ class GemmaInterview:
         state.last_turn = turn
 
         # Chiusura per volgarità o per fine colloquio
-        if turn.is_final or _is_blocked(turn):
+        if _is_blocked(turn):
             state.is_closed = True
-            if _is_blocked(turn):
-                # Forziamo il messaggio di cortesia in italiano
-                turn = self._force_close_turn(turn)
-                state.last_turn = turn
+            
+            turn = self._force_close_turn(turn)
+            state.last_turn = turn
 
         return turn
 
