@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
@@ -53,6 +53,15 @@ class IsMeaningful(StrictModel):
     #    return self
 
 
+class EvaluationOfPreviousAnswer(StrictModel):
+    """Valutazione numerica della risposta appena fornita dal candidato."""
+
+    score: int = Field(
+        ...,
+        ge=1,
+        le=10,
+        description="Punteggio complessivo della risposta, da 1 a 10.",
+    )
 
 
 
@@ -120,7 +129,7 @@ class HireReadyTurn(StrictModel):
         )
     )
     is_meaningful: IsMeaningful | None
-    #evaluation_of_previous_answer: EvaluationOfPreviousAnswer | None
+    evaluation_of_previous_answer: EvaluationOfPreviousAnswer | None
     next_question: NextQuestion | None
 
     @model_validator(mode="after")
@@ -135,6 +144,11 @@ class HireReadyTurn(StrictModel):
             )
 
         _require_meaningful_after_start(self.turn_id, self.is_meaningful)
+        if self.turn_id > 0 and self.evaluation_of_previous_answer is None:
+            raise ValueError(
+                "evaluation_of_previous_answer è obbligatoria dopo il turno "
+                "iniziale e deve contenere uno score da 1 a 10."
+            )
 
         expected_phase = self.expected_phase(self.turn_id)
         is_blocked = (

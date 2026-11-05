@@ -95,6 +95,60 @@ class HireReadyApiTests(unittest.TestCase):
 			selected_position="Sviluppatore web React",
 		)
 
+	@patch("backend.api.generate_interview_report")
+	def test_interview_report_endpoint(self, generate_report):
+		generate_report.return_value = {
+			"summary": "Il candidato ha esperienza con Python.",
+			"contenuto": "Il colloquio è terminato regolarmente.",
+			"score": 10,
+			"answers": [
+				{
+					"question": "Raccontami un progetto.",
+					"answer": "Ho realizzato un'API.",
+					"motivation": "Risposta pertinente.",
+					"score": 8,
+				}
+			],
+		}
+
+		response = self.client.post(
+			"/api/report",
+			json={
+				"history": [{"role": "user", "content": "Ho lavorato con Python."}],
+				"contenuto": "Il colloquio è terminato regolarmente.",
+				"score": 10,
+				"answers": [
+					{
+						"question": "Raccontami un progetto.",
+						"answer": "Ho realizzato un'API.",
+						"motivation": "Risposta pertinente.",
+						"score": 8,
+					}
+				],
+			},
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json()["summary"], generate_report.return_value["summary"])
+		generate_report.assert_called_once()
+
+	def test_interview_report_endpoint_rejects_scores_outside_range(self):
+		response = self.client.post(
+			"/api/report",
+			json={
+				"answers": [
+					{
+						"question": "Raccontami un progetto.",
+						"answer": "Ho realizzato un'API.",
+						"motivation": "Risposta pertinente.",
+						"score": 11,
+					}
+				]
+			},
+		)
+
+		self.assertEqual(response.status_code, 422)
+
 
 if __name__ == "__main__":
 	 unittest.main()

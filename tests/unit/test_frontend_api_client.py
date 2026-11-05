@@ -58,6 +58,42 @@ class HireReadyApiClientTests(unittest.TestCase):
 			{"anonymized_cv": "CV [EMAIL]", "selected_position": "ML Engineer"},
 		)
 
+	@patch("frontend.api_client.requests.request")
+	def test_posts_interview_report_data(self, request):
+		response = Mock(ok=True)
+		response.json.return_value = {"summary": "Esperienza in Python.", "answers": []}
+		request.return_value = response
+		client = HireReadyApiClient()
+		history = [{"role": "user", "content": "Ho lavorato con Python."}]
+		answers = [
+			{
+				"question": "Raccontami un progetto.",
+				"answer": "Ho realizzato un'API.",
+				"motivation": "Risposta pertinente.",
+				"score": 8,
+			}
+		]
+
+		result = client.generate_report(
+			history=history,
+			contenuto="Colloquio completato.",
+			answers=answers,
+			score=10,
+		)
+
+		self.assertEqual(result["summary"], "Esperienza in Python.")
+		args, kwargs = request.call_args
+		self.assertEqual(args[:2], ("POST", "http://127.0.0.1:8000/api/report"))
+		self.assertEqual(
+			kwargs["json"],
+			{
+				"history": history,
+				"contenuto": "Colloquio completato.",
+				"answers": answers,
+				"score": 10,
+			},
+		)
+
 
 if __name__ == "__main__":
 	 unittest.main()

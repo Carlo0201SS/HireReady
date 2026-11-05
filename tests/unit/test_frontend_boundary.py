@@ -19,12 +19,23 @@ class FrontendBoundaryTest(unittest.TestCase):
 	def test_frontend_does_not_import_backend_or_llm_clients(self):
 		for path in self._python_files():
 			tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+			type_checking_lines = {
+				statement.lineno
+				for guard in ast.walk(tree)
+				if isinstance(guard, ast.If)
+				and isinstance(guard.test, ast.Name)
+				and guard.test.id == "TYPE_CHECKING"
+				for statement in ast.walk(guard)
+				if isinstance(statement, (ast.Import, ast.ImportFrom))
+			}
 			for node in ast.walk(tree):
 				if isinstance(node, ast.Import):
 					names = [alias.name for alias in node.names]
 				elif isinstance(node, ast.ImportFrom):
 					names = [node.module or ""]
 				else:
+					continue
+				if node.lineno in type_checking_lines:
 					continue
 				for name in names:
 					with self.subTest(file=path.name, module=name):

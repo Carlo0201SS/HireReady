@@ -6,6 +6,10 @@ from backend.application.cv_parser_orchestrator import CVParserOrchestrator
 
 from backend.domain.models.cv_model import CVInterviewContext
 from backend.domain.models.interview_model import HireReadyTurn
+from backend.domain.models.report_model import (
+	InterviewReportRequest,
+	InterviewReportResponse,
+)
 
 
 
@@ -14,6 +18,7 @@ from backend.manager.cv.pymupdf_extractor import PyMuPDFExtractor
 from backend.manager.cv.rizzo_anonymizer import RizzoAnonymizer
 from backend.manager.llm.gemma_cv_parser import GemmaCVParser
 from backend.manager.llm.gemma_interview import GemmaInterview, InterviewState
+from backend.manager.llm.gemma_report import GemmaInterviewReporter
 
 
 @lru_cache(maxsize=1) # lru_cache memorizza il risultato della funzione.
@@ -67,7 +72,13 @@ def _rebuild_state(history: list[dict[str, str]], last_turn: HireReadyTurn) -> I
 	return InterviewState(
 		turn_id=last_turn.turn_id,
 		history=list(history),
-		is_closed=last_turn.is_final,
+		is_closed=(
+			last_turn.is_final
+			or (
+				last_turn.is_meaningful is not None
+				and last_turn.is_meaningful.azione == "blocca"
+			)
+		),
 		last_turn=last_turn,
 	)
 
@@ -111,3 +122,22 @@ def interview_service_turn(*, history, last_turn, candidate_answer):
 		candidate_answer=candidate_answer,
 	)
 	return turn, state
+
+
+@lru_cache(maxsize=1)
+def _interview_reporter() -> GemmaInterviewReporter:
+	return GemmaInterviewReporter()
+
+
+def generate_interview_report(
+	request: InterviewReportRequest,
+) -> InterviewReportResponse:
+	summary = _interview_reporter().summarize(
+		request.history,
+		request.contenuto,
+	)
+	return InterviewReportResponse(
+		summary=summary,
+		contenuto=request.contenuto,
+		answers=request.answers,
+	)

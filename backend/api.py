@@ -9,6 +9,7 @@ from backend.controller import (
 	anonymization_state,
 	anonymize_cv,
 	extract_cv_text,
+	generate_interview_report,
 	interview_handle,
 	is_anonymization_available,
 	parse_cv_for_interview,
@@ -22,6 +23,10 @@ from backend.domain.models.api_model import (
 	CVTextResponse,
 	InterviewResponse,
 	InterviewRequest,
+)
+from backend.domain.models.report_model import (
+	InterviewReportRequest,
+	InterviewReportResponse,
 )
 
 from backend.domain.models.interview_model import (
@@ -63,6 +68,7 @@ def root() -> dict[str, object]:
 			"cv_extraction": "POST /api/cv/extract",
 			"cv_anonymization": "POST /api/cv/anonymize",
 			"cv_interview_parsing": "POST /api/cv/gemma_parse",
+			"interview_report": "POST /api/report",
 			"interview": "POST /api/interview"
 		},
 	}
@@ -153,4 +159,11 @@ def interview(request: InterviewRequest) -> InterviewResponse:
 		) from error
 	return InterviewResponse(turn=turn, history=state.history, is_closed=state.is_closed)
 
+
+@app.post("/api/report", response_model=InterviewReportResponse)
+def interview_report(request: InterviewReportRequest) -> InterviewReportResponse:
+	try:
+		return generate_interview_report(request)
+	except RuntimeError as error:
+		raise HTTPException(status_code=502, detail=str(error)) from error
 

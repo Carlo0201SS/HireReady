@@ -5,7 +5,8 @@ from pathlib import Path
 import streamlit as st
 
 from frontend.services.cv_anonymization import submit_anonymization
-from interops.api_client import BackendApiError, api_client
+from frontend.services.interview_session import reset_interview_session
+from frontend.api_client import BackendApiError, api_client
 
 
 st.title("Carica il CV") 
@@ -35,6 +36,7 @@ if uploaded_file is not None:
 			"cv_interview_context",
 		):
 			st.session_state.pop(key, None)
+		reset_interview_session(st.session_state)
 		extracted_text = ""
 
 	if not extracted_text:

@@ -1,11 +1,16 @@
 import unittest
+from unittest.mock import Mock, patch
 
 from pydantic import ValidationError
 
+from backend.domain.models.cv_model import CVParsedProfile
 from backend.domain.models.interview_model import HireReadyTurn
+from backend.controller import _rebuild_state
 from backend.manager.llm.gemma_interview import (
     DOMANDE_CV,
     DOMANDE_TECNICHE,
+    GemmaInterview,
+    InterviewState,
     SYSTEM_PROMPT_TEMPLATE,
     _ensure_meaningful_classification,
     _response_schema_for_turn,
@@ -26,14 +31,55 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         self.assertIn("volgarità o rivolge insulti offensivi", prompt)
         self.assertIn("risposte errate, vaghe, incomplete, non pertinenti", prompt)
         self.assertIn('turn_id 0, 1 e 2: phase="cv"', prompt)
+        self.assertIn("La prima chiamata avviene con turn_id=0", prompt)
+        self.assertIn("la prima domanda è il turno 0", prompt)
+        self.assertIn("non dire \"passiamo alla seconda domanda\"", prompt)
         self.assertIn('turn_id 3: phase="presentazione"', prompt)
         self.assertIn('turn_id da 4 a 10: phase="tecnica"', prompt)
         self.assertIn('turn_id 11: phase="finale" e is_final=true', prompt)
         self.assertIn("esattamente 7 domande", prompt)
+        self.assertIn("un intero da 1 a 10", prompt)
         self.assertIn(
             'Da turn_id 1 in poi è obbligatorio restituire l\'oggetto '
             'is_meaningful',
             prompt,
+        )
+
+    def test_start_generates_the_first_question_on_turn_zero(self):
+        interview = GemmaInterview()
+        interview._request_turn = Mock(
+            return_value=(
+                '{"turn_id":0,"phase":"cv","is_final":false,'
+                '"is_meaningful":null,'
+                '"evaluation_of_previous_answer":null,'
+                '"next_question":{"id":1,'
+                '"text":"Raccontami un progetto professionale rilevante."}}'
+            )
+        )
+        profile = CVParsedProfile.model_validate(
+            {
+                "professional_summary": "Sviluppatore web.",
+                "technical_skills": ["Python"],
+                "relevant_experience": ["Sviluppo backend."],
+                "education": [],
+                "certifications": [],
+                "interview_focus": ["API"],
+            }
+        )
+
+        turn, state = interview.start(
+            position="Sviluppatore backend",
+            candidate_profile=profile,
+        )
+
+        self.assertEqual(state.turn_id, 0)
+        self.assertEqual(turn.turn_id, 0)
+        response_format = interview._request_turn.call_args.args[1]
+        self.assertEqual(
+            response_format["json_schema"]["schema"]["properties"]["turn_id"][
+                "const"
+            ],
+            0,
         )
 
     def test_json_schema_documents_moderation_and_finalization_rules(self):
@@ -59,6 +105,14 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         self.assertTrue(
             all(
                 option.get("type") != "null"
+                for option in cv_schema["properties"][
+                    "evaluation_of_previous_answer"
+                ]["anyOf"]
+            )
+        )
+        self.assertTrue(
+            all(
+                option.get("type") != "null"
                 for option in cv_schema["properties"]["next_question"]["anyOf"]
             )
         )
@@ -75,6 +129,14 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 for option in initial_schema["properties"]["is_meaningful"]["anyOf"]
             )
         )
+        self.assertTrue(
+            any(
+                option.get("type") == "null"
+                for option in initial_schema["properties"][
+                    "evaluation_of_previous_answer"
+                ]["anyOf"]
+            )
+        )
 
     def test_is_meaningful_is_nullable_only_on_initial_turn(self):
         initial_turn = {
@@ -82,6 +144,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
             "phase": "cv",
             "is_final": False,
             "is_meaningful": None,
+            "evaluation_of_previous_answer": None,
             "next_question": {
                 "id": 1,
                 "text": "Raccontami un'esperienza professionale.",
@@ -97,6 +160,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                     "azione": action,
                     "motivazione": "Classificazione della risposta.",
                 },
+                "evaluation_of_previous_answer": {"score": 7},
                 "next_question": {
                     "id": 2,
                     "text": "Quali strumenti hai utilizzato?",
@@ -158,6 +222,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
             (
                 '{"turn_id":3,"phase":"presentazione","is_final":false,'
                 '"is_meaningful":null,'
+                '"evaluation_of_previous_answer":{"score":8},'
                 '"next_question":{"id":4,'
                 '"text":"Raccontami il tuo percorso professionale."}}'
             ),
@@ -187,6 +252,9 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                         "azione": "prosegui",
                         "motivazione": "Il linguaggio è appropriato.",
                     },
+                    "evaluation_of_previous_answer": (
+                        None if turn_id == 0 else {"score": 7}
+                    ),
                     "next_question": (
                         None
                         if is_final
@@ -209,11 +277,132 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                     "azione": "blocca",
                     "motivazione": "È stato usato un insulto offensivo.",
                 },
+                "evaluation_of_previous_answer": {"score": 1},
                 "next_question": None,
             },
             context={"expected_turn_id": 2},
         )
         self.assertTrue(blocked_turn.is_final)
+
+    def test_normal_final_turn_marks_interview_closed(self):
+        final_turn = HireReadyTurn.model_validate(
+            {
+                "turn_id": 11,
+                "phase": "finale",
+                "is_final": True,
+                "is_meaningful": {
+                    "azione": "prosegui",
+                    "motivazione": "Il linguaggio è appropriato.",
+                },
+                "evaluation_of_previous_answer": {"score": 8},
+                "next_question": None,
+            }
+        )
+        previous_turn = HireReadyTurn.model_validate(
+            {
+                "turn_id": 10,
+                "phase": "tecnica",
+                "is_final": False,
+                "is_meaningful": {
+                    "azione": "prosegui",
+                    "motivazione": "Il linguaggio è appropriato.",
+                },
+                "evaluation_of_previous_answer": {"score": 8},
+                "next_question": {
+                    "id": 11,
+                    "text": "Descrivi un problema tecnico complesso.",
+                },
+            }
+        )
+        state = InterviewState(turn_id=10, last_turn=previous_turn)
+        interview = GemmaInterview()
+
+        with patch.object(interview, "_call_llm", return_value=final_turn):
+            turn = interview.next_turn(
+                state=state,
+                candidate_answer="Ho risolto un problema tecnico.",
+            )
+
+        self.assertTrue(turn.is_final)
+        self.assertTrue(state.is_closed)
+
+    def test_moderation_close_marks_interview_closed(self):
+        blocked_turn = HireReadyTurn.model_validate(
+            {
+                "turn_id": 4,
+                "phase": "tecnica",
+                "is_final": False,
+                "is_meaningful": {
+                    "azione": "blocca",
+                    "motivazione": "Linguaggio offensivo.",
+                },
+                "evaluation_of_previous_answer": {"score": 1},
+                "next_question": {
+                    "id": 5,
+                    "text": "Descrivi un progetto tecnico.",
+                },
+            }
+        )
+        previous_turn = HireReadyTurn.model_validate(
+            {
+                "turn_id": 3,
+                "phase": "presentazione",
+                "is_final": False,
+                "is_meaningful": {
+                    "azione": "prosegui",
+                    "motivazione": "Il linguaggio è appropriato.",
+                },
+                "evaluation_of_previous_answer": {"score": 8},
+                "next_question": {
+                    "id": 4,
+                    "text": "Come si relazionano le tue competenze al ruolo?",
+                },
+            }
+        )
+        state = InterviewState(turn_id=3, last_turn=previous_turn)
+        interview = GemmaInterview()
+
+        with patch.object(interview, "_call_llm", return_value=blocked_turn):
+            turn = interview.next_turn(
+                state=state,
+                candidate_answer="Risposta con linguaggio offensivo.",
+            )
+
+        self.assertTrue(turn.is_final)
+        self.assertTrue(state.is_closed)
+
+    def test_rebuilt_state_is_closed_for_final_or_blocked_turn(self):
+        final_turn = HireReadyTurn.model_validate(
+            {
+                "turn_id": 11,
+                "phase": "finale",
+                "is_final": True,
+                "is_meaningful": {
+                    "azione": "prosegui",
+                    "motivazione": "Il linguaggio è appropriato.",
+                },
+                "evaluation_of_previous_answer": {"score": 8},
+                "next_question": None,
+            }
+        )
+        blocked_turn = HireReadyTurn.model_validate(
+            {
+                "turn_id": 4,
+                "phase": "finale",
+                "is_final": True,
+                "is_meaningful": {
+                    "azione": "blocca",
+                    "motivazione": "Linguaggio offensivo.",
+                },
+                "evaluation_of_previous_answer": {"score": 1},
+                "next_question": None,
+            }
+        )
+
+        for last_turn in (final_turn, blocked_turn):
+            with self.subTest(turn_id=last_turn.turn_id):
+                state = _rebuild_state([], last_turn)
+                self.assertTrue(state.is_closed)
 
     def test_rejects_phase_mismatch_and_unexpected_turn_id(self):
         turn = {
@@ -224,6 +413,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 "azione": "prosegui",
                 "motivazione": "Il linguaggio è appropriato.",
             },
+            "evaluation_of_previous_answer": {"score": 7},
             "next_question": {
                 "id": 4,
                 "text": "Raccontami un'esperienza professionale.",

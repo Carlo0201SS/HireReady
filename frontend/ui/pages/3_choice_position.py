@@ -4,7 +4,8 @@ from pathlib import Path
 import streamlit as st
 
 from frontend.services.cv_anonymization import submit_anonymization
-from interops.api_client import BackendApiError, api_client
+from frontend.services.interview_session import reset_interview_session
+from frontend.api_client import BackendApiError, api_client
 
 
 st.title("Posizione di candidatura")
@@ -80,6 +81,7 @@ if submitted:
 		except BackendApiError as error:
 			st.error(str(error))
 		else:
+			reset_interview_session(st.session_state)
 			st.session_state["cv_interview_context"] = parsed_context
 			st.success("Profilo estratto e salvato nella sessione.")
 			st.json(parsed_context["profile"])

@@ -16,7 +16,7 @@ from interops.lm_studio_client import LMStudioAPI, LMStudioUnavailableError
 
 
 # ---------------------------------------------------------------------------
-# System prompt (il testo fornito nel file originale, pulito dalle graffe JS)
+# Prompt del colloquio
 # ---------------------------------------------------------------------------
 DOMANDE_CV = 3
 DOMANDE_TECNICHE = 7
@@ -44,12 +44,17 @@ Significato dei campi del profilo:
 - "interview_focus": aree su cui concentrare il colloquio
 
 # STRUTTURA DEL COLLOQUIO
-Il turno corrente è indicato da turn_id. Rispetta rigorosamente questa tabella:
+Il turno corrente è indicato da turn_id. turn_id identifica la risposta JSON che stai generando, non il numero di risposte già date dal candidato.
+La prima chiamata avviene con turn_id=0: in quella risposta poni la prima domanda CV. Dopo ogni risposta del candidato, il backend incrementa turn_id di uno e ti chiede il turno successivo. Non anticipare né saltare turni.
+Il messaggio tecnico usato dal backend per avviare il colloquio non è una risposta del candidato e non è una domanda già posta. Al turn_id=0 questa è la prima domanda: non ringraziare per una risposta precedente e non dire "passiamo alla seconda domanda".
+Rispetta rigorosamente questa tabella:
 - turn_id 0, 1 e 2: phase="cv". Fai esattamente {num_domande_cv} domande complessive, una per turno, sulle esperienze, competenze e aree di approfondimento del CV.
 - turn_id 3: phase="presentazione". Chiedi al candidato una breve presentazione personale e del proprio percorso.
 - turn_id da 4 a 10: phase="tecnica". Fai esattamente {num_domande_tecniche} domande tecniche, una per turno, sulle competenze richieste dalla posizione. Parti dai concetti di base e aumenta gradualmente la difficoltà; collega le domande alle competenze dichiarate quando pertinente.
 - turn_id 11: phase="finale" e is_final=true. Concludi il colloquio senza porre un'altra domanda.
+Quindi la prima domanda è il turno 0 e le tre domande CV sono quelle dei turni 0, 1 e 2. Il turno 3 è la presentazione; i turni da 4 a 10 sono le sette domande tecniche; il turno 11 è solo la chiusura.
 Per tutti i turni da 0 a 10, imposta is_final=false e phase secondo la tabella. Non saltare turni, non ripetere turni e non aggiungere domande di approfondimento: se una risposta è vaga o incompleta, prosegui con la domanda prevista per il turno successivo e considera la lacuna nella valutazione finale. L'unica eccezione alla conclusione al turno 11 è la chiusura per linguaggio inappropriato descritta sotto.
+Al turno 0 imposta evaluation_of_previous_answer=null. Da turn_id 1 in poi valuta esclusivamente l'ultima risposta del candidato: evaluation_of_previous_answer deve essere un oggetto con il solo campo score, un intero da 1 a 10. Assegna un punteggio complessivo basato su pertinenza, chiarezza e correttezza della risposta; non aggiungere commenti o altri campi.
 
 # REGOLE DI INTERAZIONE
 - Procedi un passo alla volta: fai una sola domanda per messaggio e aspetta sempre la risposta del candidato prima di andare avanti.
@@ -137,6 +142,12 @@ def _response_schema_for_turn(turn_id: int) -> dict:
             for variant in meaningful_schema["anyOf"]
             if variant.get("type") != "null"
         ]
+        evaluation_schema = schema["properties"]["evaluation_of_previous_answer"]
+        evaluation_schema["anyOf"] = [
+            variant
+            for variant in evaluation_schema["anyOf"]
+            if variant.get("type") != "null"
+        ]
 
     if turn_id == 11:
         schema["properties"]["next_question"] = {"type": "null"}
@@ -169,7 +180,7 @@ class InterviewState:
 # ---------------------------------------------------------------------------
 class GemmaInterview:
     """Orchestratore del colloquio HireReady. Tutte le chiamate verso LM Studio
-    passano da interops.LMStudioAPI (OpenAI-compatible /v1/chat/completions)."""
+    passano da interops.LMStudioAPI."""
 
     def __init__(
         self,
@@ -255,12 +266,13 @@ class GemmaInterview:
         turn = self._call_llm(state, candidate_answer.strip())
         state.last_turn = turn
 
-        # Chiusura per volgarità o per fine colloquio
         if _is_blocked(turn):
-            state.is_closed = True
-            
             turn = self._force_close_turn(turn)
             state.last_turn = turn
+
+        # La risposta API deve segnalare la chiusura sia per moderazione sia
+        # al termine normale del turno finale.
+        state.is_closed = turn.is_final or _is_blocked(turn)
 
         return turn
 

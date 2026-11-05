@@ -3,7 +3,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from interops.api_client import BackendApiError, api_client
+from frontend.api_client import BackendApiError, api_client
 
 
 # ----------------------------------------------------------------------
@@ -167,7 +167,13 @@ if "interview_turn" not in st.session_state:
                 st.stop()
         st.session_state["interview_turn"] = response["turn"]
         st.session_state["interview_history"] = response["history"]
-        st.session_state["interview_closed"] = response["is_closed"]
+        st.session_state["interview_closed"] = (
+            response["is_closed"]
+            or api_client.is_interview_closed(response["turn"])
+        )
+        st.session_state["interview_report_answers"] = []
+        st.session_state.pop("interview_report", None)
+        st.session_state["answer_counter"] = 0
         st.rerun()
     st.stop()
 
@@ -210,8 +216,12 @@ with col_llm:
 # ----------------------------------------------------------------------
 is_meaningful = current_turn.get("is_meaningful") or {}
 if is_meaningful.get("azione") == "blocca":
+    evaluation = current_turn.get("evaluation_of_previous_answer") or {}
+    score = evaluation.get("score")
+    score_text = f" · {score}/10" if score is not None else ""
     st.markdown(
-        '<div class="fase-badge" style="background:#ffc9c9;">❌ Risposta non adeguata</div>',
+        f'<div class="fase-badge" style="background:#ffc9c9;">'
+        f'❌ Risposta non adeguata{score_text}</div>',
         unsafe_allow_html=True,
     )
     st.caption(is_meaningful.get("motivazione", "Nessuna motivazione fornita."))
@@ -219,7 +229,7 @@ elif current_turn.get("evaluation_of_previous_answer") is not None:
     ev = current_turn["evaluation_of_previous_answer"]
     st.markdown(
         f'<div class="fase-badge" style="background:#c8f7c5;">'
-        f'✅ Risposta precedente: {ev.get("score", "—")}/3</div>',
+        f'✅ Risposta precedente: {ev.get("score", "—")}/10</div>',
         unsafe_allow_html=True,
     )
     st.caption(ev.get("comment", ""))
@@ -230,6 +240,8 @@ elif current_turn.get("evaluation_of_previous_answer") is not None:
 # ----------------------------------------------------------------------
 if is_closed:
     st.info("Il colloquio è concluso.")
+    if st.button("Visualizza il report ➜", type="primary"):
+        st.switch_page(str(Path(__file__).resolve().with_name("5_report.py")))
     st.stop()
 
 st.markdown('<div class="label-rispondi">La tua risposta</div>', unsafe_allow_html=True)
@@ -257,16 +269,37 @@ if invia:
     else:
         with st.spinner("Valutazione della risposta in corso…"):
             try:
+                previous_turn = st.session_state["interview_turn"]
                 response = api_client.interview(
                     history=st.session_state["interview_history"],
-                    last_turn=st.session_state["interview_turn"],
+                    last_turn=previous_turn,
                     candidate_answer=risposta_utente.strip(),
                 )
             except BackendApiError as error:
                 st.error(str(error))
                 st.stop()
-        st.session_state["interview_turn"] = response["turn"]
+        evaluated_turn = response["turn"]
+        next_question = previous_turn.get("next_question") or {}
+        evaluation = evaluated_turn.get("evaluation_of_previous_answer") or {}
+        meaningful = evaluated_turn.get("is_meaningful") or {}
+        if next_question.get("text"):
+            answers = st.session_state.setdefault("interview_report_answers", [])
+            answers.append(
+                {
+                    "question": next_question["text"],
+                    "answer": risposta_utente.strip(),
+                    "motivation": meaningful.get(
+                        "motivazione",
+                        "Nessuna motivazione fornita.",
+                    ),
+                    "score": evaluation["score"],
+                }
+            )
+
+        st.session_state["interview_turn"] = evaluated_turn
         st.session_state["interview_history"] = response["history"]
-        st.session_state["interview_closed"] = response["is_closed"]
+        st.session_state["interview_closed"] = (
+            response["is_closed"] or api_client.is_interview_closed(evaluated_turn)
+        )
         st.session_state["answer_counter"] = st.session_state.get("answer_counter", 0) + 1
         st.rerun()

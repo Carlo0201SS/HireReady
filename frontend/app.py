@@ -39,5 +39,12 @@ interview_page = st.Page(
 	str(FRONTEND_DIR / "ui" / "pages" / "4_interview.py"),
 	title="Colloquio",
 )
-navigation = st.navigation([upload_page, position_page, interview_page], position="hidden")
+report_page = st.Page(
+	str(FRONTEND_DIR / "ui" / "pages" / "5_report.py"),
+	title="Report",
+)
+navigation = st.navigation(
+	[upload_page, position_page, interview_page, report_page],
+	position="hidden",
+)
 navigation.run()
