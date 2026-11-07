@@ -11,14 +11,26 @@ class CVParserOrchestrator:
 		*,
 		anonymized_cv: str,
 		selected_position: str,
+		position_description: str = "",
 	) -> CVInterviewContext:
 		if not anonymized_cv.strip():
 			raise ValueError("Il CV anonimizzato è vuoto.")
 		if not selected_position.strip():
 			raise ValueError("La posizione selezionata è vuota.")
 
-		profile = self._parser.parse(anonymized_cv, selected_position)
+		result = self._parser.parse(
+			anonymized_cv,
+			selected_position,
+			position_description,
+		)
+		if position_description.strip() and not result.position_description_coherent:
+			raise ValueError(
+				"La descrizione inserita non sembra coerente con la posizione selezionata. "
+				"Modificala o rimuovila prima di continuare."
+			)
+
 		return CVInterviewContext(
 			selected_position=selected_position,
-			profile=profile,
+			position_description=position_description,
+			profile=result.profile,
 		)

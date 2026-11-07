@@ -130,6 +130,7 @@ def parse_cv_for_interview_endpoint(request: CVParserRequest) -> CVParserRespons
 		return parse_cv_for_interview(
 			anonymized_cv=request.anonymized_cv,
 			selected_position=request.selected_position,
+			position_description=request.position_description,
 		)
 	except ValueError as error:
 		raise HTTPException(status_code=422, detail=str(error)) from error
@@ -145,6 +146,7 @@ def interview(request: InterviewRequest) -> InterviewResponse:
 			last_turn=request.last_turn,
 			candidate_answer=request.candidate_answer,
 			selected_position=request.selected_position,
+			position_description=request.position_description,
 			profile=request.profile,
 		)
 	except ValueError as error:
@@ -166,4 +168,3 @@ def interview_report(request: InterviewReportRequest) -> InterviewReportResponse
 		return generate_interview_report(request)
 	except RuntimeError as error:
 		raise HTTPException(status_code=502, detail=str(error)) from error
-

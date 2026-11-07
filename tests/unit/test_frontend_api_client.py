@@ -48,14 +48,46 @@ class HireReadyApiClientTests(unittest.TestCase):
 		request.return_value = response
 		client = HireReadyApiClient()
 
-		result = client.parse_cv_for_interview("CV [EMAIL]", "ML Engineer")
+		result = client.parse_cv_for_interview(
+			"CV [EMAIL]",
+			"ML Engineer",
+			position_description="Esperienza con modelli ML.",
+		)
 
 		self.assertEqual(result["selected_position"], "ML Engineer")
 		args, kwargs = request.call_args
 		self.assertEqual(args[:2], ("POST", "http://127.0.0.1:8000/api/cv/gemma_parse"))
 		self.assertEqual(
 			kwargs["json"],
-			{"anonymized_cv": "CV [EMAIL]", "selected_position": "ML Engineer"},
+			{
+				"anonymized_cv": "CV [EMAIL]",
+				"selected_position": "ML Engineer",
+				"position_description": "Esperienza con modelli ML.",
+			},
+		)
+
+	@patch("frontend.api_client.requests.request")
+	def test_posts_position_description_when_starting_interview(self, request):
+		response = Mock(ok=True)
+		response.json.return_value = {"turn": {}, "history": [], "is_closed": False}
+		request.return_value = response
+		client = HireReadyApiClient()
+
+		client.interview(
+			selected_position="ML Engineer",
+			position_description="Esperienza con modelli ML.",
+			profile={"technical_skills": ["Python"]},
+		)
+
+		self.assertEqual(
+			request.call_args.kwargs["json"],
+			{
+				"history": [],
+				"last_turn": None,
+				"selected_position": "ML Engineer",
+				"position_description": "Esperienza con modelli ML.",
+				"profile": {"technical_skills": ["Python"]},
+			},
 		)
 
 	@patch("frontend.api_client.requests.request")
@@ -78,7 +110,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 			history=history,
 			contenuto="Colloquio completato.",
 			answers=answers,
-			score=10,
+			score=None,
 		)
 
 		self.assertEqual(result["summary"], "Esperienza in Python.")
@@ -90,7 +122,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 				"history": history,
 				"contenuto": "Colloquio completato.",
 				"answers": answers,
-				"score": 10,
+				"score": None,
 			},
 		)
 

@@ -65,14 +65,22 @@ class HireReadyApiClient:
 		result = self._request("POST", "/api/cv/anonymize", json={"text": text})
 		return result["text"]
 
-	def parse_cv_for_interview(self, anonymized_cv: str, selected_position: str) -> dict:
+	def parse_cv_for_interview(
+		self,
+		anonymized_cv: str,
+		selected_position: str,
+		position_description: str = "",
+	) -> dict:
+		payload = {
+			"anonymized_cv": anonymized_cv,
+			"selected_position": selected_position,
+		}
+		if position_description.strip():
+			payload["position_description"] = position_description
 		return self._request(
 			"POST",
 			"/api/cv/gemma_parse",
-			json={
-				"anonymized_cv": anonymized_cv,
-				"selected_position": selected_position,
-			},
+			json=payload,
 		)
 
 	# ------------------------------------------------------------------
@@ -85,6 +93,7 @@ class HireReadyApiClient:
 		last_turn: HireReadyTurn | dict | None = None,
 		candidate_answer: str | None = None,
 		selected_position: str | None = None,
+		position_description: str | None = None,
 		profile: CVParsedProfile | dict | None = None,
 	) -> dict:
 		"""Chiama POST /api/interview.
@@ -109,6 +118,8 @@ class HireReadyApiClient:
 			payload["candidate_answer"] = candidate_answer
 		if selected_position is not None:
 			payload["selected_position"] = selected_position
+		if position_description is not None and position_description.strip():
+			payload["position_description"] = position_description
 		if profile_payload is not None:
 			payload["profile"] = profile_payload
 		return self._request("POST", "/api/interview", json=payload)
@@ -119,7 +130,7 @@ class HireReadyApiClient:
 		history: list[dict[str, str]] | None = None,
 		contenuto: str = "",
 		answers: list[dict[str, Any]] | None = None,
-		score: int,
+		score: float | None = None,
 	) -> dict:
 		return self._request(
 			"POST",

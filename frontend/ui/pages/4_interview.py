@@ -160,6 +160,7 @@ if "interview_turn" not in st.session_state:
             try:
                 response = api_client.interview(
                     selected_position=context["selected_position"],
+                    position_description=context.get("position_description", ""),
                     profile=context["profile"],
                 )
             except BackendApiError as error:
@@ -224,7 +225,6 @@ if is_meaningful.get("azione") == "blocca":
         f'❌ Risposta non adeguata{score_text}</div>',
         unsafe_allow_html=True,
     )
-    st.caption(is_meaningful.get("motivazione", "Nessuna motivazione fornita."))
 elif current_turn.get("evaluation_of_previous_answer") is not None:
     ev = current_turn["evaluation_of_previous_answer"]
     st.markdown(
@@ -232,7 +232,6 @@ elif current_turn.get("evaluation_of_previous_answer") is not None:
         f'✅ Risposta precedente: {ev.get("score", "—")}/10</div>',
         unsafe_allow_html=True,
     )
-    st.caption(ev.get("comment", ""))
 
 
 # ----------------------------------------------------------------------
@@ -240,8 +239,9 @@ elif current_turn.get("evaluation_of_previous_answer") is not None:
 # ----------------------------------------------------------------------
 if is_closed:
     st.info("Il colloquio è concluso.")
-    if st.button("Visualizza il report ➜", type="primary"):
-        st.switch_page(str(Path(__file__).resolve().with_name("5_report.py")))
+    if is_meaningful.get("azione") != "blocca":
+        if st.button("Visualizza il report ➜", type="primary"):
+            st.switch_page(str(Path(__file__).resolve().with_name("5_report.py")))
     st.stop()
 
 st.markdown('<div class="label-rispondi">La tua risposta</div>', unsafe_allow_html=True)
@@ -282,7 +282,7 @@ if invia:
         next_question = previous_turn.get("next_question") or {}
         evaluation = evaluated_turn.get("evaluation_of_previous_answer") or {}
         meaningful = evaluated_turn.get("is_meaningful") or {}
-        if next_question.get("text"):
+        if evaluated_turn.get("turn_id") != 11 and next_question.get("text"):
             answers = st.session_state.setdefault("interview_report_answers", [])
             answers.append(
                 {

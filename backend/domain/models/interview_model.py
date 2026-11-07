@@ -30,8 +30,10 @@ class IsMeaningful(StrictModel):
     )
     motivazione: str = Field(
         description=(
-            "Spiega brevemente la presenza di volgarità o insulti solo se "
-            "azione='blocca'; altrimenti indica che il linguaggio è appropriato."
+            "Nei turni da 1 a 10 contiene esclusivamente un consiglio di "
+            "miglioramento breve, concreto e specifico, preferibilmente in una "
+            "sola frase; vale anche per risposte di alta qualità. Se azione='blocca', "
+            "indica brevemente il motivo del blocco."
         )
     )
 
@@ -144,10 +146,17 @@ class HireReadyTurn(StrictModel):
             )
 
         _require_meaningful_after_start(self.turn_id, self.is_meaningful)
-        if self.turn_id > 0 and self.evaluation_of_previous_answer is None:
+        if self.turn_id == 11 and self.evaluation_of_previous_answer is not None:
+            raise ValueError(
+                "Al turno 11 evaluation_of_previous_answer deve essere null."
+            )
+        if (
+            0 < self.turn_id < 11
+            and self.evaluation_of_previous_answer is None
+        ):
             raise ValueError(
                 "evaluation_of_previous_answer è obbligatoria dopo il turno "
-                "iniziale e deve contenere uno score da 1 a 10."
+                "iniziale e fino al turno 10, e deve contenere uno score da 1 a 10."
             )
 
         expected_phase = self.expected_phase(self.turn_id)

@@ -3,8 +3,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from frontend.services.cv_anonymization import submit_anonymization
-from frontend.services.interview_session import reset_interview_session
+from backend.controller import reset_interview_session, submit_anonymization
 from frontend.api_client import BackendApiError, api_client
 
 
@@ -22,12 +21,16 @@ if not source_cv:
 	)
 	st.stop()
 
-with st.form("position_selection"):
-	selected_position = st.selectbox(
-		"Seleziona la posizione per cui vuoi candidarti",
-		options=["Sviluppatore web React", "ML Engineer", "AI Agent Enthusiast", "Sviluppatore Android Kotlin"],
-	)
-	submitted = st.form_submit_button("Conferma posizione")
+selected_position = st.selectbox(
+	"Seleziona la posizione per cui vuoi candidarti",
+	options=["Sviluppatore web React", "ML Engineer", "AI Agent Enthusiast", "Sviluppatore Android Kotlin"],
+)
+position_description = st.text_area(
+	"Descrizione o dettagli della posizione (facoltativo)",
+	placeholder="Aggiungi responsabilità, requisiti o argomenti che vuoi approfondire nel colloquio.",
+	help="Queste informazioni verranno usate per adattare l'analisi del CV e le domande del colloquio.",
+)
+submitted = st.button("Conferma posizione", type="primary")
 
 if submitted:
 	st.session_state["selected_position"] = selected_position
@@ -77,6 +80,7 @@ if submitted:
 			parsed_context = api_client.parse_cv_for_interview(
 				anonymized_cv=anonymized_cv,
 				selected_position=selected_position,
+				position_description=position_description,
 			)
 		except BackendApiError as error:
 			st.error(str(error))

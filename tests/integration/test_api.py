@@ -4,6 +4,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from backend.api import app
+from backend.domain.models.report_model import InterviewSummary
 
 
 class HireReadyApiTests(unittest.TestCase):
@@ -70,6 +71,7 @@ class HireReadyApiTests(unittest.TestCase):
 	def test_parse_cv_for_interview_endpoint(self, parse_cv):
 		parse_cv.return_value = {
 			"selected_position": "Sviluppatore web React",
+			"position_description": "Esperienza con API REST.",
 			"profile": {
 				"professional_summary": "Sviluppatrice web.",
 				"technical_skills": ["React", "TypeScript"],
@@ -84,21 +86,42 @@ class HireReadyApiTests(unittest.TestCase):
 			json={
 				"anonymized_cv": "CV anonimo",
 				"selected_position": "Sviluppatore web React",
+				"position_description": "Esperienza con API REST.",
 			},
 		)
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.json()["selected_position"], "Sviluppatore web React")
+		self.assertEqual(response.json()["position_description"], "Esperienza con API REST.")
 		self.assertEqual(response.json()["profile"]["technical_skills"], ["React", "TypeScript"])
 		parse_cv.assert_called_once_with(
 			anonymized_cv="CV anonimo",
 			selected_position="Sviluppatore web React",
+			position_description="Esperienza con API REST.",
 		)
+
+	@patch("backend.api.parse_cv_for_interview", side_effect=ValueError(
+		"La descrizione inserita non sembra coerente con la posizione selezionata."
+	))
+	def test_parse_cv_for_interview_rejects_incoherent_position_description(self, parse_cv):
+		response = self.client.post(
+			"/api/cv/gemma_parse",
+			json={
+				"anonymized_cv": "CV anonimo",
+				"selected_position": "Sviluppatore web React",
+				"position_description": "Cerchiamo un cuoco per il ristorante.",
+			},
+		)
+
+		self.assertEqual(response.status_code, 422)
+		self.assertIn("non sembra coerente", response.json()["detail"])
+		parse_cv.assert_called_once()
 
 	@patch("backend.api.generate_interview_report")
 	def test_interview_report_endpoint(self, generate_report):
 		generate_report.return_value = {
 			"summary": "Il candidato ha esperienza con Python.",
+			"intervention_points": [],
 			"contenuto": "Il colloquio è terminato regolarmente.",
 			"score": 10,
 			"answers": [
@@ -130,7 +153,42 @@ class HireReadyApiTests(unittest.TestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.json()["summary"], generate_report.return_value["summary"])
+		self.assertEqual(response.json()["intervention_points"], [])
 		generate_report.assert_called_once()
+
+	@patch("backend.controller._interview_reporter")
+	def test_interview_report_omits_null_scores_from_arithmetic_mean(self, get_reporter):
+		get_reporter.return_value.summarize.return_value = InterviewSummary(
+			summary="Riepilogo del colloquio.",
+			intervention_points=[],
+		)
+		response = self.client.post(
+			"/api/report",
+			json={
+				"contenuto": "Colloquio completato.",
+				"score": None,
+				"answers": [
+					{
+						"question": f"Domanda {index}",
+						"answer": f"Risposta {index}",
+						"motivation": "Valutata.",
+						"score": index,
+					}
+					for index in range(1, 11)
+				] + [
+					{
+						"question": "Domanda senza voto",
+						"answer": "Risposta senza voto",
+						"motivation": "Non valutabile.",
+						"score": None,
+					}
+				],
+			},
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json()["score"], 5.5)
+		self.assertIsNone(response.json()["answers"][-1]["score"])
 
 	def test_interview_report_endpoint_rejects_scores_outside_range(self):
 		response = self.client.post(

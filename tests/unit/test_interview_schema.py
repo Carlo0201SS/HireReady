@@ -26,7 +26,7 @@ FINAL_TURN = {
 		"azione": "prosegui",
 		"motivazione": "Il linguaggio è appropriato.",
 	},
-	"evaluation_of_previous_answer": {"score": 8},
+	"evaluation_of_previous_answer": None,
 	"next_question": None,
 }
 
@@ -43,12 +43,11 @@ class InterviewSchemaTests(unittest.TestCase):
 			schema["$defs"]["EvaluationOfPreviousAnswer"]["properties"],
 		)
 
-	def test_validates_final_turn_with_score_from_previous_answer(self):
+	def test_validates_final_turn_without_score(self):
 		turn = HireReadyTurn.model_validate(FINAL_TURN)
 
 		self.assertTrue(turn.is_final)
-		assert turn.evaluation_of_previous_answer is not None
-		self.assertEqual(turn.evaluation_of_previous_answer.score, 8)
+		self.assertIsNone(turn.evaluation_of_previous_answer)
 
 	def test_requires_score_for_every_turn_after_start(self):
 		turn = {
@@ -75,6 +74,15 @@ class InterviewSchemaTests(unittest.TestCase):
 				}
 				with self.assertRaises(ValidationError):
 					HireReadyTurn.model_validate(turn)
+
+	def test_final_turn_rejects_a_score(self):
+		with self.assertRaises(ValidationError):
+			HireReadyTurn.model_validate(
+				{
+					**FINAL_TURN,
+					"evaluation_of_previous_answer": {"score": 8},
+				}
+			)
 
 	def test_validates_early_moderation_close(self):
 		turn = {

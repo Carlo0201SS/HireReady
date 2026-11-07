@@ -29,6 +29,7 @@ class CVParserRequest(BaseModel):
 
 	anonymized_cv: str = Field(min_length=1)
 	selected_position: str = Field(min_length=1)
+	position_description: str = ""
 
 
 CVParserResponse = CVInterviewContext
@@ -60,6 +61,7 @@ class InterviewRequest(BaseModel):
 
 	# Bootstrap (obbligatori solo al turno 0)
 	selected_position: str | None = None
+	position_description: str | None = None
 	profile: CVParsedProfile | None = None
 
 	@model_validator(mode="after")
@@ -80,9 +82,14 @@ class InterviewRequest(BaseModel):
 				raise ValueError(
 					"Nei turni successivi 'candidate_answer' è obbligatoria."
 				)
-			if self.selected_position is not None or self.profile is not None:
+			if (
+				self.selected_position is not None
+				or self.position_description is not None
+				or self.profile is not None
+			):
 				raise ValueError(
-					"'selected_position' e 'profile' vanno inviati solo al primo turno."
+					"'selected_position', 'position_description' e 'profile' "
+					"vanno inviati solo al primo turno."
 				)
 		return self
 

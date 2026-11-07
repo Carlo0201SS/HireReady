@@ -61,13 +61,16 @@ if not st.session_state.get("interview_closed", False):
 report = st.session_state.get("interview_report")
 if report is None:
 	contenuto = (current_turn.get("is_meaningful") or {}).get("motivazione", "")
+	report_history = history
+	if current_turn.get("turn_id") == 11:
+		report_history = history[:-2]
 	with st.spinner("Gemma sta preparando il riepilogo del colloquio..."):
 		try:
 			report = api_client.generate_report(
-				history=history,
+				history=report_history,
 				contenuto=contenuto,
 				answers=st.session_state.get("interview_report_answers", []),
-				score=st.session_state.get("score_response")
+				score=st.session_state.get("score_response"),
 			)
 		except BackendApiError as error:
 			st.error(str(error))
@@ -77,10 +80,35 @@ if report is None:
 	st.session_state["interview_report"] = report
 
 summary = html.escape(report.get("summary", "Riepilogo non disponibile."))
+average_score = report.get("score")
+if average_score is not None:
+	st.metric("Media complessiva", f"{average_score:.2f}/10")
+
 st.markdown(
 	f'<section class="report-summary"><strong>In sintesi</strong><br>{summary}</section>',
 	unsafe_allow_html=True,
 )
+
+intervention_points = report.get("intervention_points", [])
+st.subheader("Punti di intervento")
+if not intervention_points:
+	st.info("Non sono emersi punti di intervento specifici dalle risposte.")
+for point in intervention_points:
+	area = html.escape(point.get("area", ""))
+	evidence = html.escape(point.get("evidence", ""))
+	recommendation = html.escape(point.get("recommendation", ""))
+	st.markdown(
+		f"""
+		<article class="answer-card">
+			<h3>{area}</h3>
+			<div class="answer-label">Evidenza nel colloquio</div>
+			<div>{evidence}</div>
+			<div class="answer-label">Intervento consigliato</div>
+			<div>{recommendation}</div>
+		</article>
+		""",
+		unsafe_allow_html=True,
+	)
 
 answers = report.get("answers", [])
 st.subheader("Valutazione delle risposte")
@@ -88,13 +116,19 @@ if not answers:
 	st.info("Non sono presenti risposte valutabili nel report.")
 
 for index, item in enumerate(answers, start=1):
-	score = item.get("score", 0)
-	if score <= 4:
-		criticita = "Risposta da approfondire"
+	score = item.get("score")
+	if score is None:
+		score_label = "Voto non disponibile"
+		criticita = ""
+	elif score <= 4:
+		score_label = f"{score}/10"
+		criticita = " · Risposta da approfondire"
 	elif score <= 7:
-		criticita = "Risposta parzialmente efficace"
+		score_label = f"{score}/10"
+		criticita = " · Risposta parzialmente efficace"
 	else:
-		criticita = "Risposta solida"
+		score_label = f"{score}/10"
+		criticita = " · Risposta solida"
 	question = html.escape(item.get("question", ""))
 	answer = html.escape(item.get("answer", ""))
 	motivation = html.escape(item.get("motivation", ""))
@@ -102,7 +136,7 @@ for index, item in enumerate(answers, start=1):
 		f"""
 		<article class="answer-card">
 			<h3>Risposta {index}
-				<span class="answer-score">{score}/10 · {criticita}</span>
+				<span class="answer-score">{score_label}{criticita}</span>
 			</h3>
 			<div class="answer-label">Domanda</div>
 			<div>{question}</div>

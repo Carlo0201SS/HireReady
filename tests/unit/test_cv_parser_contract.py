@@ -7,7 +7,10 @@ import requests
 
 from backend.application.cv_parser_orchestrator import CVParserOrchestrator
 from backend.domain.models.api_model import CVParserRequest
-from backend.domain.models.cv_model import CVInterviewContext, CVParsedProfile
+from backend.domain.models.cv_model import (
+	CVInterviewContext,
+	CVParserResult,
+)
 from backend.manager.llm.gemma_cv_parser import GemmaCVParser
 from interops.lm_studio_client import LMStudioAPI, LMStudioUnavailableError
 
@@ -19,6 +22,10 @@ PROFILE = {
 	"education": [],
 	"certifications": [],
 	"interview_focus": ["Architettura React", "Accessibilita' web"],
+}
+PARSER_RESULT = {
+	"profile": PROFILE,
+	"position_description_coherent": True,
 }
 
 
@@ -37,29 +44,71 @@ class CVParserContractTests(unittest.TestCase):
 		context = CVInterviewContext.model_validate(
 			{
 				"selected_position": "Sviluppatore web React",
+				"position_description": "Esperienza con API REST.",
 				"profile": PROFILE,
 			}
 		)
 		schema = type(context).model_json_schema()
 
 		self.assertEqual(context.profile.technical_skills, ["React", "TypeScript"])
+		self.assertEqual(context.position_description, "Esperienza con API REST.")
 		self.assertIn("interview_focus", schema["$defs"]["CVParsedProfile"]["properties"])
 
 
 class CVParserOrchestratorTests(unittest.TestCase):
 	def test_returns_context_with_selected_position_and_parsed_profile(self):
 		parser = Mock()
-		parser.parse.return_value = CVParsedProfile.model_validate(PROFILE)
+		parser.parse.return_value = CVParserResult.model_validate(PARSER_RESULT)
 		orchestrator = CVParserOrchestrator(parser)
 
 		context = orchestrator.parse_for_interview(
 			anonymized_cv="CV con dati anonimizzati",
 			selected_position="Sviluppatore web React",
+			position_description="Esperienza con API REST.",
 		)
 
 		self.assertEqual(context.selected_position, "Sviluppatore web React")
+		self.assertEqual(context.position_description, "Esperienza con API REST.")
 		self.assertEqual(context.profile.technical_skills, ["React", "TypeScript"])
-		parser.parse.assert_called_once_with("CV con dati anonimizzati", "Sviluppatore web React")
+		parser.parse.assert_called_once_with(
+			"CV con dati anonimizzati",
+			"Sviluppatore web React",
+			"Esperienza con API REST.",
+		)
+
+	def test_rejects_position_description_flagged_as_incoherent(self):
+		parser = Mock()
+		parser.parse.return_value = CVParserResult.model_validate(
+			{
+				"profile": PROFILE,
+				"position_description_coherent": False,
+			}
+		)
+		orchestrator = CVParserOrchestrator(parser)
+
+		with self.assertRaisesRegex(ValueError, "non sembra coerente"):
+			orchestrator.parse_for_interview(
+				anonymized_cv="CV anonimizzato",
+				selected_position="Sviluppatore web React",
+				position_description="Cerchiamo un cuoco per il ristorante.",
+			)
+
+	def test_allows_empty_optional_position_description(self):
+		parser = Mock()
+		parser.parse.return_value = CVParserResult.model_validate(
+			{
+				"profile": PROFILE,
+				"position_description_coherent": False,
+			}
+		)
+		orchestrator = CVParserOrchestrator(parser)
+
+		context = orchestrator.parse_for_interview(
+			anonymized_cv="CV anonimizzato",
+			selected_position="Sviluppatore web React",
+		)
+
+		self.assertEqual(context.position_description, "")
 
 	def test_rejects_missing_inputs_without_calling_parser(self):
 		parser = Mock()
@@ -78,13 +127,18 @@ class GemmaCVParserTests(unittest.TestCase):
 		lm_studio = Mock()
 		lm_studio.chat_completions.return_value = (
 			200,
-			json.dumps({"choices": [{"message": {"content": json.dumps(PROFILE)}}]}),
+			json.dumps({"choices": [{"message": {"content": json.dumps(PARSER_RESULT)}}]}),
 		)
 		parser = GemmaCVParser(lm_studio=lm_studio, model="google/gemma-4-e2b")
 
-		profile = parser.parse("CV [EMAIL]", "Sviluppatore web React")
+		profile = parser.parse(
+			"CV [EMAIL]",
+			"Sviluppatore web React",
+			"Esperienza con API REST.",
+		)
 
-		self.assertEqual(profile.technical_skills, ["React", "TypeScript"])
+		self.assertEqual(profile.profile.technical_skills, ["React", "TypeScript"])
+		self.assertTrue(profile.position_description_coherent)
 		model, messages, response_format = lm_studio.chat_completions.call_args.args
 		self.assertEqual(
 			lm_studio.chat_completions.call_args.kwargs["temperature"],
@@ -93,9 +147,10 @@ class GemmaCVParserTests(unittest.TestCase):
 		self.assertEqual(model, "google/gemma-4-e2b")
 		self.assertIn("CV [EMAIL]", messages[1]["content"])
 		self.assertIn("Sviluppatore web React", messages[1]["content"])
+		self.assertIn("Esperienza con API REST.", messages[1]["content"])
 		self.assertEqual(
 			response_format["json_schema"]["schema"],
-			CVParsedProfile.model_json_schema(),
+			CVParserResult.model_json_schema(),
 		)
 
 	def test_rejects_nonconforming_model_output(self):

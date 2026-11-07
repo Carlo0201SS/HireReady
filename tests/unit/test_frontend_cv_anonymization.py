@@ -1,14 +1,14 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from frontend.services.cv_anonymization import (
+from backend.controller import (
 	_anonymize_when_ready,
 	submit_anonymization,
 )
 
 
 class FrontendCVAnonymizationTests(unittest.TestCase):
-	@patch("frontend.services.cv_anonymization.sleep")
+	@patch("backend.controller.sleep")
 	def test_waits_for_model_before_anonymizing(self, sleep):
 		get_status = Mock(
 			side_effect=[
@@ -35,7 +35,7 @@ class FrontendCVAnonymizationTests(unittest.TestCase):
 		self.assertEqual(future.result(timeout=5), "CV anonimizzato")
 		anonymize.assert_called_once_with("CV originale")
 
-	@patch("frontend.services.cv_anonymization.sleep")
+	@patch("backend.controller.sleep")
 	def test_model_error_fails_without_calling_anonymizer(self, sleep):
 		anonymize = Mock()
 		get_status = Mock(return_value={"available": False, "state": "error"})

@@ -22,10 +22,12 @@ class InterviewModerationPolicyTests(unittest.TestCase):
     def test_system_prompt_limits_blocking_to_profanity_and_insults(self):
         prompt = SYSTEM_PROMPT_TEMPLATE.format(
             position="Sviluppatore Python",
+            position_description="Esperienza con API REST.",
             candidate_profile="{}",
             num_domande_cv=DOMANDE_CV,
             num_domande_tecniche=DOMANDE_TECNICHE,
         )
+        self.assertIn("Esperienza con API REST.", prompt)
 
         self.assertIn('is_meaningful.azione="blocca" esclusivamente', prompt)
         self.assertIn("volgarità o rivolge insulti offensivi", prompt)
@@ -39,6 +41,9 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         self.assertIn('turn_id 11: phase="finale" e is_final=true', prompt)
         self.assertIn("esattamente 7 domande", prompt)
         self.assertIn("un intero da 1 a 10", prompt)
+        self.assertIn("esclusivamente per dare un consiglio di miglioramento breve", prompt)
+        self.assertIn("Non riassumere la risposta, non spiegare il voto", prompt)
+        self.assertIn("Anche per una risposta di alta qualità indica un piccolo passo pratico", prompt)
         self.assertIn(
             'Da turn_id 1 in poi è obbligatorio restituire l\'oggetto '
             'is_meaningful',
@@ -70,10 +75,20 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         turn, state = interview.start(
             position="Sviluppatore backend",
             candidate_profile=profile,
+            position_description="Esperienza con API REST e PostgreSQL.",
         )
 
         self.assertEqual(state.turn_id, 0)
         self.assertEqual(turn.turn_id, 0)
+        prompt_messages = interview._request_turn.call_args.args[0]
+        self.assertIn(
+            "Esperienza con API REST e PostgreSQL.",
+            prompt_messages[0]["content"],
+        )
+        self.assertIn(
+            "Personalizza queste domande usando la sezione",
+            prompt_messages[0]["content"],
+        )
         response_format = interview._request_turn.call_args.args[1]
         self.assertEqual(
             response_format["json_schema"]["schema"]["properties"]["turn_id"][
@@ -120,6 +135,10 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         self.assertIs(final_schema["properties"]["is_final"]["const"], True)
         self.assertEqual(
             final_schema["properties"]["next_question"],
+            {"type": "null"},
+        )
+        self.assertEqual(
+            final_schema["properties"]["evaluation_of_previous_answer"],
             {"type": "null"},
         )
         initial_schema = _response_schema_for_turn(0)
@@ -253,7 +272,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                         "motivazione": "Il linguaggio è appropriato.",
                     },
                     "evaluation_of_previous_answer": (
-                        None if turn_id == 0 else {"score": 7}
+                        None if turn_id in (0, 11) else {"score": 7}
                     ),
                     "next_question": (
                         None
@@ -294,7 +313,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                     "azione": "prosegui",
                     "motivazione": "Il linguaggio è appropriato.",
                 },
-                "evaluation_of_previous_answer": {"score": 8},
+                "evaluation_of_previous_answer": None,
                 "next_question": None,
             }
         )
@@ -381,7 +400,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                     "azione": "prosegui",
                     "motivazione": "Il linguaggio è appropriato.",
                 },
-                "evaluation_of_previous_answer": {"score": 8},
+                "evaluation_of_previous_answer": None,
                 "next_question": None,
             }
         )

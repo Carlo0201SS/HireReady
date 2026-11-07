@@ -12,8 +12,21 @@ class CVParsedProfile(BaseModel):
 	interview_focus: list[str] = Field(description="Aree del CV utili per un colloquio sulla posizione scelta.")
 
 
+class CVParserResult(BaseModel):
+	model_config = ConfigDict(extra="forbid", strict=True)
+
+	profile: CVParsedProfile
+	position_description_coherent: bool = Field(
+		description=(
+			"Indica se la descrizione della posizione è pertinente alla posizione "
+			"selezionata; true anche quando la descrizione è vuota."
+		)
+	)
+
+
 class CVInterviewContext(BaseModel):
 	model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
 
 	selected_position: str = Field(min_length=1)
+	position_description: str = ""
 	profile: CVParsedProfile

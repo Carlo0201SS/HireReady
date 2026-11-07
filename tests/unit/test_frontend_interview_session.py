@@ -1,6 +1,6 @@
 import unittest
 
-from frontend.services.interview_session import reset_interview_session
+from backend.controller import reset_interview_session
 
 
 class InterviewSessionTests(unittest.TestCase):

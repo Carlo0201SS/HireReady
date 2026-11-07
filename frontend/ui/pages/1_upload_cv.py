@@ -4,8 +4,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from frontend.services.cv_anonymization import submit_anonymization
-from frontend.services.interview_session import reset_interview_session
+from backend.controller import reset_interview_session, submit_anonymization
 from frontend.api_client import BackendApiError, api_client
 
 
