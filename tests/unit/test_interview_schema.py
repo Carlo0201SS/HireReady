@@ -2,6 +2,7 @@ import unittest
 
 from pydantic import ValidationError
 
+from backend.domain.models.api_model import InterviewRequest
 from backend.domain.models.interview_model import HireReadyTurn
 
 
@@ -33,6 +34,35 @@ FINAL_TURN = {
 
 
 class InterviewSchemaTests(unittest.TestCase):
+	def test_interview_start_requires_supported_level_position(self):
+		profile = {
+			"professional_summary": "Sviluppatore web.",
+			"technical_skills": ["React"],
+			"relevant_experience": ["Sviluppo frontend."],
+			"education": [],
+			"certifications": [],
+			"interview_focus": ["React"],
+		}
+
+		request = InterviewRequest(
+			selected_position="Sviluppatore web React",
+			level_position="junior",
+			profile=profile,
+		)
+		self.assertEqual(request.level_position, "junior")
+
+		with self.assertRaises(ValidationError):
+			InterviewRequest(
+				selected_position="Sviluppatore web React",
+				profile=profile,
+			)
+		with self.assertRaises(ValidationError):
+			InterviewRequest(
+				selected_position="Sviluppatore web React",
+				level_position="expert",
+				profile=profile,
+			)
+
 	def test_validates_start_turn_and_generates_json_schema(self):
 		turn = HireReadyTurn.model_validate(START_TURN)
 		schema = HireReadyTurn.model_json_schema()

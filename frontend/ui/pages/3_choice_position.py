@@ -86,7 +86,8 @@ if submitted:
 			st.error(str(error))
 		else:
 			reset_interview_session(st.session_state)
+			st.session_state.pop("level_position", None)
 			st.session_state["cv_interview_context"] = parsed_context
 			st.success("Profilo estratto e salvato nella sessione.")
 			st.json(parsed_context["profile"])
-			st.switch_page(str(Path(__file__).resolve().with_name("4_interview.py")))
+			st.switch_page(str(Path(__file__).resolve().with_name("4_level_position.py")))

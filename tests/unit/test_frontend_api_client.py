@@ -99,6 +99,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 
 		client.interview(
 			selected_position="ML Engineer",
+			level_position="senior",
 			position_description="Esperienza con modelli ML.",
 			profile={"technical_skills": ["Python"]},
 		)
@@ -109,6 +110,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 				"history": [],
 				"last_turn": None,
 				"selected_position": "ML Engineer",
+				"level_position": "senior",
 				"position_description": "Esperienza con modelli ML.",
 				"profile": {"technical_skills": ["Python"]},
 			},

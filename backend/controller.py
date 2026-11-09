@@ -1,7 +1,6 @@
 from collections.abc import MutableMapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import lru_cache
-from time import monotonic, sleep
 from typing import Any, Callable, Mapping
 
 from backend.application.anonymization_service import AnonymizationService
@@ -28,8 +27,6 @@ _ANONYMIZATION_EXECUTOR = ThreadPoolExecutor(
 	max_workers=1,
 	thread_name_prefix="cv-anonymization",
 )
-_ANONYMIZATION_TIMEOUT_SECONDS = 900
-_ANONYMIZATION_POLL_INTERVAL_SECONDS = 1
 _INTERVIEW_SESSION_KEYS = (
 	"interview_turn",
 	"interview_history",
@@ -92,44 +89,6 @@ def _interview_service() -> GemmaInterview:
 
 #----------- GESTIONE STATO---------------------------------------------------
 
-def _rebuild_state(history: list[dict[str, str]], last_turn: HireReadyTurn) -> InterviewState:
-	# Il backend è stateless: lo stato del colloquio arriva dal client a ogni turno.
-	return InterviewState(
-		turn_id=last_turn.turn_id,
-		history=list(history),
-		is_closed=(
-			last_turn.is_final
-			or (
-				last_turn.is_meaningful is not None
-				and (
-					last_turn.is_meaningful.azione == "blocca"
-					or last_turn.is_meaningful.lingua.strip().casefold() != "italiano"
-				)
-			)
-		),
-		last_turn=last_turn,
-	)
-#--------- GESTIONE ANONIMIZZAZIONE-----------------------------------------------
-def _anonymize_when_ready(
-	source_text: str,
-	anonymize: Callable[[str], str],
-	get_status: Callable[[], Mapping[str, Any]],
-) -> str:
-	deadline = monotonic() + _ANONYMIZATION_TIMEOUT_SECONDS
-	while True:
-		status = get_status()
-		state = status.get("state", "idle")
-		if state == "error":
-			raise RuntimeError("La preparazione del modello di anonimizzazione è fallita.")
-		if status.get("available") and state not in {"downloading", "loading"}:
-			return anonymize(source_text)
-		if monotonic() >= deadline:
-			raise TimeoutError(
-				"Il modello di anonimizzazione non è diventato disponibile entro 15 minuti."
-			)
-		sleep(_ANONYMIZATION_POLL_INTERVAL_SECONDS)
-
-
 def submit_anonymization(
 	source_text: str,
 	anonymize: Callable[[str], str],
@@ -138,7 +97,7 @@ def submit_anonymization(
 	if not source_text.strip():
 		raise ValueError("Il testo del CV da anonimizzare è vuoto.")
 	return _ANONYMIZATION_EXECUTOR.submit(
-		_anonymize_when_ready,
+		RizzoAnonymizer._anonymize_when_ready,
 		source_text,
 		anonymize,
 		get_status,
@@ -156,6 +115,7 @@ def interview_handle(
 	last_turn: HireReadyTurn | None,
 	candidate_answer: str | None,
 	selected_position: str | None,
+	level_position: str | None,
 	profile,
 	position_description: str | None = None,
 ) -> tuple[HireReadyTurn, InterviewState]:
@@ -163,10 +123,13 @@ def interview_handle(
 
 	if last_turn is None:
 		# Turno 0: bootstrap
-		if not selected_position or profile is None:
-			raise ValueError("Al primo turno servono 'selected_position' e 'profile'.")
+		if not selected_position or not level_position or profile is None:
+			raise ValueError(
+				"Al primo turno servono 'selected_position', 'level_position' e 'profile'."
+			)
 		return service.start(
 			position=selected_position,
+			level_position=level_position,
 			candidate_profile=profile,
 			position_description=position_description or "",
 		)
@@ -175,18 +138,20 @@ def interview_handle(
 	if not candidate_answer or not candidate_answer.strip():
 		raise ValueError("Nei turni successivi 'candidate_answer' è obbligatoria.")
 
-	state = _rebuild_state(history, last_turn)
+	state = _interview_service()._rebuild_state(history, last_turn)
 	turn = service.next_turn(state=state, candidate_answer=candidate_answer)
 	return turn, state
 
 def interview_service_start(
 	*,
 	position,
+	level_position,
 	candidate_profile,
 	position_description="",
 ):
 	return _interview_service().start(
 		position=position,
+		level_position=level_position,
 		candidate_profile=candidate_profile,
 		position_description=position_description,
 	)
@@ -194,7 +159,7 @@ def interview_service_start(
 
 def interview_service_turn(*, history, last_turn, candidate_answer):
 	# Ricostruisce InterviewState da quanto arriva dal client (stateless)
-	state = _rebuild_state(history, last_turn)
+	state = _interview_service()._rebuild_state(history, last_turn)
 	turn = _interview_service().next_turn(
 		state=state,
 		candidate_answer=candidate_answer,

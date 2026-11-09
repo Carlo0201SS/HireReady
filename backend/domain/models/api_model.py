@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.domain.models.cv_model import CVInterviewContext, CVParsedProfile
@@ -61,6 +63,7 @@ class InterviewRequest(BaseModel):
 
 	# Bootstrap (obbligatori solo al turno 0)
 	selected_position: str | None = None
+	level_position: Literal["junior", "middle", "senior"] | None = None
 	position_description: str | None = None
 	profile: CVParsedProfile | None = None
 
@@ -69,9 +72,9 @@ class InterviewRequest(BaseModel):
 		is_start = self.last_turn is None
 
 		if is_start:
-			if not self.selected_position or not self.profile:
+			if not self.selected_position or not self.profile or not self.level_position:
 				raise ValueError(
-					"Al primo turno servono 'selected_position' e 'profile'."
+					"Al primo turno servono 'selected_position', 'level_position' e 'profile'."
 				)
 			if self.candidate_answer is not None:
 				raise ValueError(
@@ -84,11 +87,12 @@ class InterviewRequest(BaseModel):
 				)
 			if (
 				self.selected_position is not None
+				or self.level_position is not None
 				or self.position_description is not None
 				or self.profile is not None
 			):
 				raise ValueError(
-					"'selected_position', 'position_description' e 'profile' "
+					"'selected_position', 'level_position', 'position_description' e 'profile' "
 					"vanno inviati solo al primo turno."
 				)
 		return self

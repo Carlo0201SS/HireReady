@@ -3,6 +3,8 @@ import logging
 import threading
 from pathlib import Path
 import re
+from time import monotonic, sleep
+from typing import Any, Callable, Mapping
 from urllib.parse import urlsplit
 
 from huggingface_hub import snapshot_download
@@ -89,12 +91,37 @@ IGNORED_ENTITY_LABELS = frozenset(
 
 
 class RizzoAnonymizer:
+	_ANONYMIZATION_TIMEOUT_SECONDS = 900
+	_ANONYMIZATION_POLL_INTERVAL_SECONDS = 1
+
 	def __init__(self, model_dir: str | Path = DEFAULT_MODEL_DIR) -> None:
 		self.model_dir = Path(model_dir).expanduser().resolve()
 		self._pipeline = None
 		self._lock = threading.Lock()
 		# idle -> downloading -> loading -> ready  (oppure error)
 		self.state = "idle"
+
+	@staticmethod
+	def _anonymize_when_ready(
+		source_text: str,
+		anonymize: Callable[[str], str],
+		get_status: Callable[[], Mapping[str, Any]],
+	) -> str:
+		deadline = monotonic() + RizzoAnonymizer._ANONYMIZATION_TIMEOUT_SECONDS
+		while True:
+			status = get_status()
+			state = status.get("state", "idle")
+			if state == "error":
+				raise RuntimeError(
+					"La preparazione del modello di anonimizzazione è fallita."
+				)
+			if status.get("available") and state not in {"downloading", "loading"}:
+				return anonymize(source_text)
+			if monotonic() >= deadline:
+				raise TimeoutError(
+					"Il modello di anonimizzazione non è diventato disponibile entro 15 minuti."
+				)
+			sleep(RizzoAnonymizer._ANONYMIZATION_POLL_INTERVAL_SECONDS)
 
 	def warm_up(self) -> None:
 		"""Scarica il modello se manca e lo carica in memoria. Pensato per l'avvio del backend."""

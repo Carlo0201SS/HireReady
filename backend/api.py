@@ -146,6 +146,7 @@ def interview(request: InterviewRequest) -> InterviewResponse:
 			last_turn=request.last_turn,
 			candidate_answer=request.candidate_answer,
 			selected_position=request.selected_position,
+			level_position=request.level_position,
 			position_description=request.position_description,
 			profile=request.profile,
 		)

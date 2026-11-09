@@ -93,6 +93,7 @@ class HireReadyApiClient:
 		last_turn: HireReadyTurn | dict | None = None,
 		candidate_answer: str | None = None,
 		selected_position: str | None = None,
+		level_position: str | None = None,
 		position_description: str | None = None,
 		profile: CVParsedProfile | dict | None = None,
 	) -> dict:
@@ -118,6 +119,8 @@ class HireReadyApiClient:
 			payload["candidate_answer"] = candidate_answer
 		if selected_position is not None:
 			payload["selected_position"] = selected_position
+		if level_position is not None:
+			payload["level_position"] = level_position
 		if position_description is not None and position_description.strip():
 			payload["position_description"] = position_description
 		if profile_payload is not None:

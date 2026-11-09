@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from backend.domain.models.cv_model import CVParsedProfile
 from backend.domain.models.interview_model import HireReadyTurn
-from backend.controller import _rebuild_state
 from backend.manager.llm.gemma_interview import (
     DOMANDE_CV,
     DOMANDE_TECNICHE,
@@ -23,12 +22,16 @@ class InterviewModerationPolicyTests(unittest.TestCase):
     def test_system_prompt_limits_blocking_to_profanity_and_insults(self):
         prompt = SYSTEM_PROMPT_TEMPLATE.format(
             position="Sviluppatore Python",
+            level_position="middle",
             position_description="Esperienza con API REST.",
             candidate_profile="{}",
             num_domande_cv=DOMANDE_CV,
             num_domande_tecniche=DOMANDE_TECNICHE,
         )
         self.assertIn("Esperienza con API REST.", prompt)
+        self.assertIn("LIVELLO DI ESPERIENZA", prompt)
+        self.assertIn("per junior verifica i fondamenti", prompt)
+        self.assertIn("per senior privilegia progettazione", prompt)
 
         self.assertIn('is_meaningful.azione="blocca" se lingua non è "Italiano"', prompt)
         self.assertIn("volgarità o rivolge insulti offensivi", prompt)
@@ -42,6 +45,19 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         self.assertIn('turn_id 11: phase="finale" e is_final=true', prompt)
         self.assertIn("esattamente 7 domande", prompt)
         self.assertIn("un intero da 1 a 10", prompt)
+        self.assertIn("| Pertinenza e copertura della richiesta centrale | 0-5 |", prompt)
+        self.assertIn("| Correttezza e concretezza | 0-3 |", prompt)
+        self.assertIn("| Chiarezza e organizzazione | 0-2 |", prompt)
+        self.assertIn(
+            "Valuta il significato e il collegamento effettivo con la domanda",
+            prompt,
+        )
+        self.assertIn("il voto finale non può superare 5/10", prompt)
+        self.assertIn(
+            "senza spiegare in che modo il progetto usa Django non soddisfa "
+            "la richiesta centrale",
+            prompt,
+        )
         self.assertIn("usa esattamente \"Italiano\" se è in italiano", prompt)
         self.assertIn("esclusivamente per dare un consiglio di miglioramento breve", prompt)
         self.assertIn("Non riassumere la risposta, non spiegare il voto", prompt)
@@ -76,6 +92,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
 
         turn, state = interview.start(
             position="Sviluppatore backend",
+            level_position="senior",
             candidate_profile=profile,
             position_description="Esperienza con API REST e PostgreSQL.",
         )
@@ -91,6 +108,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
             "Personalizza queste domande usando la sezione",
             prompt_messages[0]["content"],
         )
+        self.assertIn("LIVELLO DI ESPERIENZA\nsenior", prompt_messages[0]["content"])
         response_format = interview._request_turn.call_args.args[1]
         self.assertEqual(
             response_format["json_schema"]["schema"]["properties"]["turn_id"][
@@ -459,7 +477,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
 
         for last_turn in (final_turn, blocked_turn):
             with self.subTest(turn_id=last_turn.turn_id):
-                state = _rebuild_state([], last_turn)
+                state = GemmaInterview._rebuild_state([], last_turn)
                 self.assertTrue(state.is_closed)
 
     def test_rejects_phase_mismatch_and_unexpected_turn_id(self):

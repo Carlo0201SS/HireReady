@@ -115,11 +115,12 @@ st.markdown(
 # GUARDIA: contesto presente?
 # ----------------------------------------------------------------------
 context = st.session_state.get("cv_interview_context")
-if not context:
-    st.info("Prima di iniziare il colloquio devi scegliere una posizione.")
+level_position = st.session_state.get("level_position")
+if not context or level_position not in {"junior", "middle", "senior"}:
+    st.info("Prima di iniziare il colloquio devi scegliere la posizione e il livello.")
     st.page_link(
-        str(Path(__file__).resolve().with_name("3_choice_position.py")),
-        label="Vai alla scelta della posizione",
+        str(Path(__file__).resolve().with_name("4_level_position.py")),
+        label="Vai alla scelta del livello",
     )
     st.stop()
 
@@ -160,6 +161,7 @@ if "interview_turn" not in st.session_state:
             try:
                 response = api_client.interview(
                     selected_position=context["selected_position"],
+                    level_position=level_position,
                     position_description=context.get("position_description", ""),
                     profile=context["profile"],
                 )

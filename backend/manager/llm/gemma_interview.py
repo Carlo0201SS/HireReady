@@ -26,6 +26,9 @@ Sei un intervistatore tecnico esperto e membro del team Risorse Umane. Conosci a
 # POSIZIONE PER CUI SI CANDIDA
 {position}
 
+# LIVELLO DI ESPERIENZA
+{level_position}
+
 # DETTAGLI AGGIUNTIVI DELLA POSIZIONE
 {position_description}
 
@@ -56,8 +59,9 @@ Rispetta rigorosamente questa tabella:
 - turn_id da 4 a 10: phase="tecnica". Fai esattamente {num_domande_tecniche} domande tecniche, una per turno, sulle competenze richieste dalla posizione. Personalizza queste domande usando la sezione "DETTAGLI AGGIUNTIVI DELLA POSIZIONE": privilegia responsabilità, tecnologie e requisiti esplicitamente indicati, e verifica le competenze pertinenti senza presumere che il candidato le possieda. Parti dai concetti di base e aumenta gradualmente la difficoltà; collega le domande alle competenze ed esperienze dichiarate nel CV quando pertinente. Se non sono forniti dettagli aggiuntivi, basa le domande sulla posizione selezionata e sul profilo.
 - turn_id 11: phase="finale" e is_final=true. Concludi il colloquio senza porre un'altra domanda.
 Quindi la prima domanda è il turno 0 e le tre domande CV sono quelle dei turni 0, 1 e 2. Il turno 3 è la presentazione; i turni da 4 a 10 sono le sette domande tecniche; il turno 11 è solo la chiusura.
+Calibra la difficoltà delle domande in base al "LIVELLO DI ESPERIENZA" selezionato: per junior verifica i fondamenti e chiedi esempi guidati; per middle approfondisci autonomia, applicazione pratica e risoluzione di problemi; per senior privilegia progettazione, trade-off, scalabilità, affidabilità e decisioni architetturali. Mantieni invariato il numero e la sequenza dei turni e non confondere il livello selezionato con competenze che il candidato non ha dichiarato.
 Per tutti i turni da 0 a 10, imposta is_final=false e phase secondo la tabella. Non saltare turni, non ripetere turni e non aggiungere domande di approfondimento: se una risposta è vaga o incompleta, prosegui con la domanda prevista per il turno successivo e considera la lacuna nella valutazione finale. L'unica eccezione alla conclusione al turno 11 è la chiusura per linguaggio inappropriato descritta sotto.
-Al turno 0 imposta evaluation_of_previous_answer=null. Dai turn_id da 1 a 10 valuta esclusivamente l'ultima risposta del candidato: evaluation_of_previous_answer deve contenere il solo campo score, un intero da 1 a 10. Assegna il punteggio complessivo in base a pertinenza, chiarezza e correttezza. Nei turni da 1 a 10 usa is_meaningful.motivazione esclusivamente per dare un consiglio di miglioramento breve, concreto e specifico, preferibilmente in una sola frase. Non riassumere la risposta, non spiegare il voto, non valutare la progressione del colloquio e non aggiungere premesse o conclusioni. Anche per una risposta di alta qualità indica un piccolo passo pratico per renderla ancora più efficace, senza inventare lacune; ad esempio, suggerisci di descrivere una sfida affrontata o una tecnologia utilizzata. Se is_meaningful.azione="blocca", indica brevemente il motivo del blocco. Al turno 11, che è solo la chiusura e non pone un'altra domanda, imposta evaluation_of_previous_answer=null e non assegnare un voto alla risposta appena ricevuta.
+
 
 # REGOLE DI INTERAZIONE
 - Procedi un passo alla volta: fai una sola domanda per messaggio e aspetta sempre la risposta del candidato prima di andare avanti.
@@ -202,12 +206,36 @@ class GemmaInterview:
         )
         self.model = model or os.getenv("LM_STUDIO_MODEL", "google/gemma-4-e2b")
 
+    @staticmethod
+    def _rebuild_state(
+        history: list[dict[str, str]],
+        last_turn: HireReadyTurn,
+    ) -> InterviewState:
+        # Il backend è stateless: lo stato del colloquio arriva dal client a ogni turno.
+        return InterviewState(
+            turn_id=last_turn.turn_id,
+            history=list(history),
+            is_closed=(
+                last_turn.is_final
+                or (
+                    last_turn.is_meaningful is not None
+                    and (
+                        last_turn.is_meaningful.azione == "blocca"
+                        or last_turn.is_meaningful.lingua.strip().casefold()
+                        != "italiano"
+                    )
+                )
+            ),
+            last_turn=last_turn,
+        )
+
     # ------------------------------------------------------------------
     # Prompt di sistema
     # ------------------------------------------------------------------
     def _build_system_prompt(
         self,
         position: str,
+        level_position: str,
         candidate_profile: CVParsedProfile,
         position_description: str = "",
     ) -> str:
@@ -219,6 +247,7 @@ class GemmaInterview:
         )
         return SYSTEM_PROMPT_TEMPLATE.format(
             position=position,
+            level_position=level_position,
             position_description=position_description or "Nessun dettaglio aggiuntivo fornito.",
             candidate_profile=profile_json,
             num_domande_cv=DOMANDE_CV,
@@ -232,15 +261,21 @@ class GemmaInterview:
         self,
         *,
         position: str,
+        level_position: str,
         candidate_profile: CVParsedProfile,
         position_description: str = "",
     ) -> tuple[HireReadyTurn, InterviewState]:
         """Avvia un nuovo colloquio: turno 0 della fase CV."""
         if not position.strip():
             raise ValueError("La posizione selezionata è vuota.")
+        if level_position not in {"junior", "middle", "senior"}:
+            raise ValueError(
+                "Il livello deve essere 'junior', 'middle' oppure 'senior'."
+            )
 
         system_prompt = self._build_system_prompt(
             position,
+            level_position,
             candidate_profile,
             position_description,
         )
