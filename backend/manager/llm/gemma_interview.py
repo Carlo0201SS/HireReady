@@ -69,8 +69,8 @@ Al turno 0 imposta evaluation_of_previous_answer=null. Dai turn_id da 1 a 10 val
 - Parli tu, l'intervistatore, rivolgendoti direttamente al candidato con il "tu" (seconda persona singolare): scrivi "presentati", "raccontami", mai "presentarmi" o "mi prego".
 
 # LINGUAGGIO INAPPROPRIATO
-is_meaningful può essere null esclusivamente al turno 0, perché non è ancora stata ricevuta una risposta del candidato. Da turn_id 1 in poi è obbligatorio restituire l'oggetto is_meaningful con azione valorizzata esattamente a "prosegui" oppure "blocca"; non omettere il campo e non usare null. Se non è chiaro che il candidato abbia effettivamente usato volgarità o rivolto un insulto, scegli "prosegui".
-Imposta is_meaningful.azione="blocca" esclusivamente se il candidato usa volgarità o rivolge insulti offensivi a qualcuno. In tal caso chiudi subito il colloquio. Per ogni altro caso imposta is_meaningful.azione="prosegui": non bloccare per risposte errate, vaghe, incomplete, non pertinenti, per lacune tecniche o perché il profilo non è allineato alla posizione. In questi casi continua il colloquio e valuta le lacune nella valutazione finale.
+is_meaningful può essere null esclusivamente al turno 0, perché non è ancora stata ricevuta una risposta del candidato. Da turn_id 1 in poi è obbligatorio restituire l'oggetto is_meaningful con azione, lingua e motivazione; non omettere campi e non usare null. lingua deve indicare la lingua della risposta dell'utente appena ricevuta: usa esattamente "Italiano" se è in italiano, altrimenti indica la lingua rilevata, ad esempio "Inglese" o "Francese". Non dedurre la lingua dalla domanda, dal CV o dal profilo.
+Imposta is_meaningful.azione="blocca" se lingua non è "Italiano" oppure se il candidato usa volgarità o rivolge insulti offensivi a qualcuno. In entrambi i casi chiudi subito il colloquio. Per ogni altro caso imposta is_meaningful.azione="prosegui": non bloccare per risposte errate, vaghe, incomplete, non pertinenti, per lacune tecniche o perché il profilo non è allineato alla posizione.
 Considera il contesto: non bloccare per termini tecnici, citazioni o riferimenti neutrali a parole offensive, né per critiche professionali non volgari.
 Per la conclusione normale, is_final=true esclusivamente al turno 11. Non impostare is_final=true a causa della qualità o pertinenza di una risposta.
 
@@ -87,10 +87,13 @@ logger = logging.getLogger(__name__)
 
 
 def _is_blocked(turn: HireReadyTurn) -> bool:
-    """True se il turno chiude il colloquio per linguaggio inappropriato."""
+    """True se il turno chiude per contenuto inappropriato o lingua non italiana."""
     return (
         turn.is_meaningful is not None
-        and turn.is_meaningful.azione == "blocca"
+        and (
+            turn.is_meaningful.azione == "blocca"
+            or turn.is_meaningful.lingua.strip().casefold() != "italiano"
+        )
     )
 
 
@@ -111,9 +114,9 @@ def _ensure_meaningful_classification(
         payload = dict(payload)
         payload["is_meaningful"] = {
             "azione": "prosegui",
+            "lingua": "non determinata",
             "motivazione": (
-                "Classificazione non disponibile; si prosegue perché non è "
-                "stato identificato con certezza un linguaggio offensivo."
+                "Lingua della risposta non determinata."
             ),
         }
     return payload
@@ -136,7 +139,7 @@ def _response_schema_for_turn(turn_id: int) -> dict:
     schema = HireReadyTurn.model_json_schema()
     schema["properties"]["turn_id"]["const"] = turn_id
     schema["properties"]["phase"]["const"] = phase
-    schema["properties"]["is_final"]["const"] = turn_id == 10
+    schema["properties"]["is_final"]["const"] = turn_id == 11
 
     if turn_id > 0:
         meaningful_schema = schema["properties"]["is_meaningful"]
@@ -386,11 +389,23 @@ class GemmaInterview:
     @staticmethod
     def _force_close_turn(turn: HireReadyTurn) -> HireReadyTurn:
         """Sostituisce il turno con un messaggio di chiusura controllato."""
+        meaningful = turn.is_meaningful
+        if meaningful is not None and meaningful.lingua.strip().casefold() != "italiano":
+            meaningful = meaningful.model_copy(
+                update={
+                    "azione": "blocca",
+                    "motivazione": (
+                        "Il colloquio può proseguire solo in italiano. "
+                        f"La risposta è stata rilevata in {meaningful.lingua}."
+                    ),
+                }
+            )
         forced = turn.model_copy(
             update={
                 "is_final": True,
                 "phase": "finale",
                 "next_question": None,
+                "is_meaningful": meaningful,
             }
         )
         # La property model_validator accetta solo questo formato (is_final=True + phase finale)

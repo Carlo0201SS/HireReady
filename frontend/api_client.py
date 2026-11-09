@@ -152,7 +152,12 @@ class HireReadyApiClient:
 		if not turn:
 			return False
 		is_meaningful = turn.get("is_meaningful") or {}
-		return bool(turn.get("is_final") or is_meaningful.get("azione") == "blocca")
+		language = str(is_meaningful.get("lingua", "")).strip().casefold()
+		return bool(
+			turn.get("is_final")
+			or is_meaningful.get("azione") == "blocca"
+			or language != "italiano"
+		)
 
 	@staticmethod
 	def turn_message(turn: dict | None) -> str:

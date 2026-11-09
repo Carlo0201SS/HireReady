@@ -20,13 +20,21 @@ class StrictModel(BaseModel):
 # Sotto-modelli
 # ---------------------------------------------------------------------------
 class IsMeaningful(StrictModel):
-    """Classificazione del linguaggio usato dal candidato."""
+    """Classificazione della risposta e della lingua usata dal candidato."""
 
     azione: Literal["prosegui", "blocca"] = Field(
         description=(
-            "'blocca' esclusivamente se il candidato usa volgarità o insulti "
-            "diretti; per qualsiasi altro contenuto usare 'prosegui'."
+            "'blocca' se la risposta non è in italiano oppure contiene volgarità "
+            "o insulti diretti; altrimenti usare 'prosegui'."
         )
+    )
+    lingua: str = Field(
+        min_length=1,
+        description=(
+            "Lingua rilevata nella risposta dell'utente appena ricevuta. Usa "
+            "esattamente 'Italiano' se la risposta è in italiano; altrimenti "
+            "indica la lingua rilevata, per esempio 'Inglese' o 'Francese'."
+        ),
     )
     motivazione: str = Field(
         description=(

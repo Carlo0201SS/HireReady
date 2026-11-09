@@ -101,7 +101,10 @@ def _rebuild_state(history: list[dict[str, str]], last_turn: HireReadyTurn) -> I
 			last_turn.is_final
 			or (
 				last_turn.is_meaningful is not None
-				and last_turn.is_meaningful.azione == "blocca"
+				and (
+					last_turn.is_meaningful.azione == "blocca"
+					or last_turn.is_meaningful.lingua.strip().casefold() != "italiano"
+				)
 			)
 		),
 		last_turn=last_turn,

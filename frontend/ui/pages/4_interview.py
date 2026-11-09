@@ -239,7 +239,10 @@ elif current_turn.get("evaluation_of_previous_answer") is not None:
 # ----------------------------------------------------------------------
 if is_closed:
     st.info("Il colloquio è concluso.")
-    if is_meaningful.get("azione") != "blocca":
+    if (
+        is_meaningful.get("azione") != "blocca"
+        and is_meaningful.get("lingua", "").strip().casefold() == "italiano"
+    ):
         if st.button("Visualizza il report ➜", type="primary"):
             st.switch_page(str(Path(__file__).resolve().with_name("5_report.py")))
     st.stop()

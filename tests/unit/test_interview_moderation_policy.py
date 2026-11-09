@@ -13,6 +13,7 @@ from backend.manager.llm.gemma_interview import (
     InterviewState,
     SYSTEM_PROMPT_TEMPLATE,
     _ensure_meaningful_classification,
+    _is_blocked,
     _response_schema_for_turn,
     _validate_turn_payload,
 )
@@ -29,7 +30,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         )
         self.assertIn("Esperienza con API REST.", prompt)
 
-        self.assertIn('is_meaningful.azione="blocca" esclusivamente', prompt)
+        self.assertIn('is_meaningful.azione="blocca" se lingua non è "Italiano"', prompt)
         self.assertIn("volgarità o rivolge insulti offensivi", prompt)
         self.assertIn("risposte errate, vaghe, incomplete, non pertinenti", prompt)
         self.assertIn('turn_id 0, 1 e 2: phase="cv"', prompt)
@@ -41,6 +42,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         self.assertIn('turn_id 11: phase="finale" e is_final=true', prompt)
         self.assertIn("esattamente 7 domande", prompt)
         self.assertIn("un intero da 1 a 10", prompt)
+        self.assertIn("usa esattamente \"Italiano\" se è in italiano", prompt)
         self.assertIn("esclusivamente per dare un consiglio di miglioramento breve", prompt)
         self.assertIn("Non riassumere la risposta, non spiegare il voto", prompt)
         self.assertIn("Anche per una risposta di alta qualità indica un piccolo passo pratico", prompt)
@@ -102,6 +104,8 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         properties = schema["$defs"]["IsMeaningful"]["properties"]
 
         self.assertIn("volgarità o insulti", properties["azione"]["description"])
+        self.assertIn("lingua", properties)
+        self.assertIn("Italiano", properties["lingua"]["description"])
         self.assertIn("risposte errate, vaghe o non pertinenti", schema["properties"]["is_final"]["description"])
 
     def test_turn_schema_is_specialized_to_the_expected_id_and_phase(self):
@@ -177,6 +181,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 "turn_id": 1,
                 "is_meaningful": {
                     "azione": action,
+                    "lingua": "Italiano",
                     "motivazione": "Classificazione della risposta.",
                 },
                 "evaluation_of_previous_answer": {"score": 7},
@@ -215,10 +220,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         payload = {"turn_id": 3, "is_meaningful": None}
         result = _ensure_meaningful_classification(payload, 3)
         self.assertEqual(result["is_meaningful"]["azione"], "prosegui")
-        self.assertIn(
-            "non è stato identificato con certezza",
-            result["is_meaningful"]["motivazione"],
-        )
+        self.assertEqual(result["is_meaningful"]["lingua"], "non determinata")
 
         missing_payload = {"turn_id": 4}
         result = _ensure_meaningful_classification(missing_payload, 4)
@@ -228,6 +230,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
             "turn_id": 2,
             "is_meaningful": {
                 "azione": "blocca",
+                "lingua": "Italiano",
                 "motivazione": "Insulto offensivo.",
             },
         }
@@ -269,6 +272,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                     "is_final": is_final,
                     "is_meaningful": {
                         "azione": "prosegui",
+                        "lingua": "Italiano",
                         "motivazione": "Il linguaggio è appropriato.",
                     },
                     "evaluation_of_previous_answer": (
@@ -294,6 +298,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 "is_final": True,
                 "is_meaningful": {
                     "azione": "blocca",
+                    "lingua": "Italiano",
                     "motivazione": "È stato usato un insulto offensivo.",
                 },
                 "evaluation_of_previous_answer": {"score": 1},
@@ -311,6 +316,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 "is_final": True,
                 "is_meaningful": {
                     "azione": "prosegui",
+                    "lingua": "Italiano",
                     "motivazione": "Il linguaggio è appropriato.",
                 },
                 "evaluation_of_previous_answer": None,
@@ -324,6 +330,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 "is_final": False,
                 "is_meaningful": {
                     "azione": "prosegui",
+                    "lingua": "Italiano",
                     "motivazione": "Il linguaggio è appropriato.",
                 },
                 "evaluation_of_previous_answer": {"score": 8},
@@ -353,6 +360,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 "is_final": False,
                 "is_meaningful": {
                     "azione": "blocca",
+                    "lingua": "Italiano",
                     "motivazione": "Linguaggio offensivo.",
                 },
                 "evaluation_of_previous_answer": {"score": 1},
@@ -369,6 +377,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 "is_final": False,
                 "is_meaningful": {
                     "azione": "prosegui",
+                    "lingua": "Italiano",
                     "motivazione": "Il linguaggio è appropriato.",
                 },
                 "evaluation_of_previous_answer": {"score": 8},
@@ -390,6 +399,34 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         self.assertTrue(turn.is_final)
         self.assertTrue(state.is_closed)
 
+    def test_non_italian_answer_forces_interview_close(self):
+        turn = HireReadyTurn.model_validate(
+            {
+                "turn_id": 4,
+                "phase": "tecnica",
+                "is_final": False,
+                "is_meaningful": {
+                    "azione": "prosegui",
+                    "lingua": "Inglese",
+                    "motivazione": "Migliora la specificità della risposta.",
+                },
+                "evaluation_of_previous_answer": {"score": 7},
+                "next_question": {
+                    "id": 5,
+                    "text": "Descrivi un progetto tecnico.",
+                },
+            }
+        )
+
+        self.assertTrue(_is_blocked(turn))
+        closed_turn = GemmaInterview._force_close_turn(turn)
+
+        self.assertTrue(closed_turn.is_final)
+        self.assertEqual(closed_turn.phase, "finale")
+        self.assertIsNone(closed_turn.next_question)
+        self.assertEqual(closed_turn.is_meaningful.azione, "blocca")
+        self.assertIn("solo in italiano", closed_turn.is_meaningful.motivazione)
+
     def test_rebuilt_state_is_closed_for_final_or_blocked_turn(self):
         final_turn = HireReadyTurn.model_validate(
             {
@@ -398,6 +435,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 "is_final": True,
                 "is_meaningful": {
                     "azione": "prosegui",
+                    "lingua": "Italiano",
                     "motivazione": "Il linguaggio è appropriato.",
                 },
                 "evaluation_of_previous_answer": None,
@@ -411,6 +449,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 "is_final": True,
                 "is_meaningful": {
                     "azione": "blocca",
+                    "lingua": "Italiano",
                     "motivazione": "Linguaggio offensivo.",
                 },
                 "evaluation_of_previous_answer": {"score": 1},
@@ -430,6 +469,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
             "is_final": False,
             "is_meaningful": {
                 "azione": "prosegui",
+                "lingua": "Italiano",
                 "motivazione": "Il linguaggio è appropriato.",
             },
             "evaluation_of_previous_answer": {"score": 7},

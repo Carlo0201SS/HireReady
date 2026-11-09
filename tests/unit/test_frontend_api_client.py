@@ -38,6 +38,30 @@ class HireReadyApiClientTests(unittest.TestCase):
 		with self.assertRaisesRegex(BackendApiError, "FastAPI sia avviato"):
 			client.anonymize_cv("CV")
 
+	def test_interview_closes_when_answer_language_is_not_italian(self):
+		self.assertTrue(
+			HireReadyApiClient.is_interview_closed(
+				{
+					"is_final": False,
+					"is_meaningful": {
+						"azione": "prosegui",
+						"lingua": "Inglese",
+					},
+				}
+			)
+		)
+		self.assertFalse(
+			HireReadyApiClient.is_interview_closed(
+				{
+					"is_final": False,
+					"is_meaningful": {
+						"azione": "prosegui",
+						"lingua": "Italiano",
+					},
+				}
+			)
+		)
+
 	@patch("frontend.api_client.requests.request")
 	def test_posts_anonymized_cv_and_selected_position_for_parsing(self, request):
 		response = Mock(ok=True)

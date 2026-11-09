@@ -24,6 +24,7 @@ FINAL_TURN = {
 	"is_final": True,
 	"is_meaningful": {
 		"azione": "prosegui",
+		"lingua": "Italiano",
 		"motivazione": "Il linguaggio è appropriato.",
 	},
 	"evaluation_of_previous_answer": None,
@@ -91,6 +92,7 @@ class InterviewSchemaTests(unittest.TestCase):
 			"is_final": True,
 			"is_meaningful": {
 				"azione": "blocca",
+				"lingua": "Italiano",
 				"motivazione": "Risposta offensiva.",
 			},
 			"evaluation_of_previous_answer": {"score": 1},
