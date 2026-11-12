@@ -147,6 +147,7 @@ def interview(request: InterviewRequest) -> InterviewResponse:
 	try:
 		turn, state = interview_handle(
 			history=request.history,
+			anonymized_cv=request.anonymized_cv,
 			last_turn=request.last_turn,
 			candidate_answer=request.candidate_answer,
 			selected_position=request.selected_position,

@@ -111,6 +111,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 		response = Mock(ok=True)
 		response.json.return_value = {
 			"selected_position": "ML Engineer",
+			"anonymized_cv": "CV [PERSON]",
 			"profile": {"technical_skills": ["Python"]},
 		}
 		request.return_value = response
@@ -123,6 +124,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 		)
 
 		self.assertEqual(result["selected_position"], "ML Engineer")
+		self.assertEqual(result["anonymized_cv"], "CV [PERSON]")
 		args, kwargs = request.call_args
 		self.assertEqual(args[:2], ("POST", "http://127.0.0.1:8000/api/cv/gemma_parse"))
 		self.assertEqual(
@@ -142,6 +144,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 		client = HireReadyApiClient()
 
 		client.interview(
+			anonymized_cv="CV [PERSON]",
 			selected_position="ML Engineer",
 			level_position="senior",
 			position_description="Esperienza con modelli ML.",
@@ -152,11 +155,36 @@ class HireReadyApiClientTests(unittest.TestCase):
 			request.call_args.kwargs["json"],
 			{
 				"history": [],
+				"anonymized_cv": "CV [PERSON]",
 				"last_turn": None,
 				"selected_position": "ML Engineer",
 				"level_position": "senior",
 				"position_description": "Esperienza con modelli ML.",
 				"profile": {"technical_skills": ["Python"]},
+			},
+		)
+
+	@patch("frontend.api_client.requests.request")
+	def test_posts_anonymized_cv_with_each_follow_up_turn(self, request):
+		response = Mock(ok=True)
+		response.json.return_value = {"turn": {}, "history": [], "is_closed": False}
+		request.return_value = response
+		client = HireReadyApiClient()
+
+		client.interview(
+			anonymized_cv="CV [PERSON]",
+			history=[{"role": "user", "content": "Risposta precedente"}],
+			last_turn={"turn_id": 1},
+			candidate_answer="Risposta attuale",
+		)
+
+		self.assertEqual(
+			request.call_args.kwargs["json"],
+			{
+				"history": [{"role": "user", "content": "Risposta precedente"}],
+				"anonymized_cv": "CV [PERSON]",
+				"last_turn": {"turn_id": 1},
+				"candidate_answer": "Risposta attuale",
 			},
 		)
 

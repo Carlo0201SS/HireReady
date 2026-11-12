@@ -113,6 +113,7 @@ def reset_interview_session(session_state: MutableMapping[str, Any]) -> None:
 def interview_handle(
 	*,
 	history: list[dict[str, str]],
+	anonymized_cv: str,
 	last_turn: HireReadyTurn | None,
 	candidate_answer: str | None,
 	selected_position: str | None,
@@ -133,13 +134,14 @@ def interview_handle(
 			level_position=level_position,
 			candidate_profile=profile,
 			position_description=position_description or "",
+			anonymized_cv=anonymized_cv,
 		)
 
 	# Turni successivi: ricostruisce lo stato dal payload (stateless)
 	if not candidate_answer or not candidate_answer.strip():
 		raise ValueError("Nei turni successivi 'candidate_answer' è obbligatoria.")
 
-	state = _interview_service()._rebuild_state(history, last_turn)
+	state = _interview_service()._rebuild_state(history, last_turn, anonymized_cv)
 	turn = service.next_turn(state=state, candidate_answer=candidate_answer)
 	return turn, state
 
@@ -148,6 +150,7 @@ def interview_service_start(
 	position,
 	level_position,
 	candidate_profile,
+	anonymized_cv,
 	position_description="",
 ):
 	return _interview_service().start(
@@ -155,12 +158,13 @@ def interview_service_start(
 		level_position=level_position,
 		candidate_profile=candidate_profile,
 		position_description=position_description,
+		anonymized_cv=anonymized_cv,
 	)
 
 
-def interview_service_turn(*, history, last_turn, candidate_answer):
+def interview_service_turn(*, history, last_turn, candidate_answer, anonymized_cv):
 	# Ricostruisce InterviewState da quanto arriva dal client (stateless)
-	state = _interview_service()._rebuild_state(history, last_turn)
+	state = _interview_service()._rebuild_state(history, last_turn, anonymized_cv)
 	turn = _interview_service().next_turn(
 		state=state,
 		candidate_answer=candidate_answer,

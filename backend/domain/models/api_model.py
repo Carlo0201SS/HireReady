@@ -50,12 +50,14 @@ class InterviewRequest(BaseModel):
 	                history restituita dal server al turno precedente,
 	                selected_position + profile ignorati (già nel system prompt
 	                dentro `history`).
+	- Tutti i turni: anonymized_cv obbligatorio per il controllo di coerenza.
 	"""
 
 	model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
 
 	# Stato della sessione (sempre presente)
 	history: list[dict[str, str]] = Field(default_factory=list)
+	anonymized_cv: str = Field(min_length=1)
 	last_turn: HireReadyTurn | None = None
 
 	# Input del turno (opzionale al turno 0)
@@ -72,9 +74,15 @@ class InterviewRequest(BaseModel):
 		is_start = self.last_turn is None
 
 		if is_start:
-			if not self.selected_position or not self.profile or not self.level_position:
+			if (
+				not self.selected_position
+				or not self.profile
+				or not self.level_position
+				or not self.anonymized_cv.strip()
+			):
 				raise ValueError(
-					"Al primo turno servono 'selected_position', 'level_position' e 'profile'."
+					"Al primo turno servono 'selected_position', 'level_position', "
+					"'profile' e 'anonymized_cv'."
 				)
 			if self.candidate_answer is not None:
 				raise ValueError(

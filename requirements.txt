@@ -24,7 +24,7 @@ python-multipart
 httpx  # TestClient FastAPI
 
 # Report Generation
+reportlab>=4.2
 weasyprint
 Jinja2
-
 

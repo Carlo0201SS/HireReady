@@ -45,6 +45,7 @@ class CVParserContractTests(unittest.TestCase):
 			{
 				"selected_position": "Sviluppatore web React",
 				"position_description": "Esperienza con API REST.",
+				"anonymized_cv": "CV [PERSON] con dati anonimizzati",
 				"profile": PROFILE,
 			}
 		)
@@ -52,6 +53,7 @@ class CVParserContractTests(unittest.TestCase):
 
 		self.assertEqual(context.profile.technical_skills, ["React", "TypeScript"])
 		self.assertEqual(context.position_description, "Esperienza con API REST.")
+		self.assertEqual(context.anonymized_cv, "CV [PERSON] con dati anonimizzati")
 		self.assertIn("interview_focus", schema["$defs"]["CVParsedProfile"]["properties"])
 
 
@@ -69,6 +71,7 @@ class CVParserOrchestratorTests(unittest.TestCase):
 
 		self.assertEqual(context.selected_position, "Sviluppatore web React")
 		self.assertEqual(context.position_description, "Esperienza con API REST.")
+		self.assertEqual(context.anonymized_cv, "CV con dati anonimizzati")
 		self.assertEqual(context.profile.technical_skills, ["React", "TypeScript"])
 		parser.parse.assert_called_once_with(
 			"CV con dati anonimizzati",

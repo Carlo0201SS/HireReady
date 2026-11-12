@@ -46,6 +46,7 @@ class EmploymentConsistencyTests(unittest.TestCase):
 		)
 		interview = GemmaInterview(lm_studio=client, model="test")
 		state = InterviewState(
+			anonymized_cv="Esperienza: Dal 2019 al 2021 ho lavorato per XYZ.",
 			history=[
 				{"role": "system", "content": self.system_prompt},
 				{"role": "user", "content": "Dal 2019 al 2021 ho lavorato per XYZ."},
@@ -89,6 +90,7 @@ class EmploymentConsistencyTests(unittest.TestCase):
 		)
 		interview = GemmaInterview(lm_studio=client, model="test")
 		state = InterviewState(
+			anonymized_cv="Esperienza: Dal 2019 al 2021 ho lavorato per XYZ.",
 			history=[
 				{"role": "system", "content": self.system_prompt},
 				{"role": "user", "content": "Ho lavorato per XYZ nel 2020."},
@@ -213,10 +215,13 @@ class EmploymentConsistencyTests(unittest.TestCase):
 			"\n\n# NOME."
 		)
 		state = InterviewState(
+			anonymized_cv="Competenze: Django",
 			history=[
 				{"role": "system", "content": profile_prompt},
 				{"role": "assistant", "content": "Hai mai usato Django?"},
 				{"role": "user", "content": "Ho lavorato con Python."},
+				{"role": "user", "content": "In realtà non l'ho mai utilizzato."},
+				{"role": "user", "content": "In realtà non l'ho mai utilizzato."},
 			]
 		)
 		interview = GemmaInterview(lm_studio=client, model="test")
@@ -228,10 +233,16 @@ class EmploymentConsistencyTests(unittest.TestCase):
 
 		self.assertEqual(result.status, "contradiction")
 		request = json.loads(client.chat_completions.call_args.args[1][1]["content"])
-		self.assertEqual(request["profile"]["technical_skills"], ["Django"])
-		self.assertIn(
-			{"role": "assistant", "content": "Hai mai usato Django?"},
-			request["previous_dialogue"],
+		self.assertEqual(
+			request,
+			{
+				"anonymized_cv": "Competenze: Django",
+				"previous_candidate_answers": [
+					"Ho lavorato con Python.",
+					"In realtà non l'ho mai utilizzato.",
+				],
+				"current_candidate_answer": "In realtà non l'ho mai utilizzato.",
+			},
 		)
 
 	def test_checks_even_when_no_profile_fields_or_date_pattern_trigger_a_match(self):
@@ -257,6 +268,7 @@ class EmploymentConsistencyTests(unittest.TestCase):
 			),
 		)
 		state = InterviewState(
+			anonymized_cv="CV [PERSON] con competenze non indicate.",
 			history=[
 				{
 					"role": "system",
@@ -331,7 +343,8 @@ class EmploymentConsistencyTests(unittest.TestCase):
 				interview = GemmaInterview(lm_studio=client, model="test")
 				result = interview._check_profile_consistency(
 					state=InterviewState(
-						history=[{"role": "system", "content": profile_prompt}]
+						anonymized_cv=profile_claim,
+						history=[{"role": "system", "content": profile_prompt}],
 					),
 					candidate_answer=answer,
 				)
@@ -339,6 +352,56 @@ class EmploymentConsistencyTests(unittest.TestCase):
 				self.assertEqual(result.status, "contradiction")
 				self.assertEqual(result.conflicting_claim, expected_conflicting_claim)
 				client.chat_completions.assert_called_once()
+
+	def test_detects_conflicting_identity_from_anonymized_cv(self):
+		client = Mock()
+		client.chat_completions.return_value = (
+			200,
+			json.dumps(
+				{
+					"choices": [
+						{
+							"message": {
+								"content": json.dumps(
+									{
+										"status": "contradiction",
+										"current_claim": (
+											"Io mi chiamo Gabriele Grandi."
+										),
+										"conflicting_claim": "Giuseppe Landi",
+									}
+								)
+							}
+						}
+					]
+				}
+			),
+		)
+		interview = GemmaInterview(lm_studio=client, model="test")
+		state = InterviewState(
+			anonymized_cv="Nome: Giuseppe Landi",
+			history=[{"role": "system", "content": "Prompt non rilevante"}],
+		)
+
+		result = interview._check_profile_consistency(
+			state=state,
+			candidate_answer="Io mi chiamo Gabriele Grandi.",
+		)
+
+		self.assertEqual(result.status, "contradiction")
+		request = json.loads(client.chat_completions.call_args.args[1][1]["content"])
+		self.assertEqual(request["anonymized_cv"], "Nome: Giuseppe Landi")
+		self.assertEqual(
+			set(request),
+			{
+				"anonymized_cv",
+				"previous_candidate_answers",
+				"current_candidate_answer",
+			},
+		)
+		prompt = client.chat_completions.call_args.args[1][0]["content"]
+		self.assertIn("devi usare 'contradiction'", prompt)
+		self.assertIn("Vale anche per nomi e cognomi diversi", prompt)
 
 
 if __name__ == "__main__":

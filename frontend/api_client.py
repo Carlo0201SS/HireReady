@@ -89,6 +89,7 @@ class HireReadyApiClient:
 	def interview(
 		self,
 		*,
+		anonymized_cv: str,
 		history: list[dict[str, str]] | None = None,
 		last_turn: HireReadyTurn | dict | None = None,
 		candidate_answer: str | None = None,
@@ -99,6 +100,7 @@ class HireReadyApiClient:
 	) -> dict:
 		"""Chiama POST /api/interview.
 
+		- Tutti i turni: passare il CV anonimizzato.
 		- Turno 0: passare `selected_position` + `profile`.
 		- Turni successivi: passare `history` + `last_turn` + `candidate_answer`.
 		"""
@@ -114,7 +116,11 @@ class HireReadyApiClient:
 			else profile
 		)
 
-		payload: dict = {"history": history or [], "last_turn": last_turn_payload}
+		payload: dict = {
+			"history": history or [],
+			"anonymized_cv": anonymized_cv,
+			"last_turn": last_turn_payload,
+		}
 		if candidate_answer is not None:
 			payload["candidate_answer"] = candidate_answer
 		if selected_position is not None:

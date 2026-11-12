@@ -88,6 +88,7 @@ YEAR_PATTERN = re.compile(r"\s*(?:19\d{2}|20(?:[0-2]\d|30))(?:\s*[-–—/]\s*(?
 IGNORED_ENTITY_LABELS = frozenset(
 	{"ZIP", "ZIP_CODE", "ZIPCODE", "POSTAL_CODE", "POSTALCODE", "POSTCODE", "DOCID"}
 )
+PRESERVED_ENTITY_LABELS = frozenset({"FULLNAME"})
 
 
 class RizzoAnonymizer:
@@ -180,7 +181,7 @@ class RizzoAnonymizer:
 			label = self._normalize_label(
 				str(entity.get("entity_group") or entity.get("entity") or "PII")
 			)
-			if label in IGNORED_ENTITY_LABELS:
+			if label in IGNORED_ENTITY_LABELS or label in PRESERVED_ENTITY_LABELS:
 				continue
 			redactions.append((start, end, label))
 

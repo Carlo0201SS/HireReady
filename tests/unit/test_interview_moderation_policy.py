@@ -125,6 +125,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
             position="Sviluppatore backend",
             level_position="senior",
             candidate_profile=profile,
+            anonymized_cv="CV anonimizzato",
             position_description="Esperienza con API REST e PostgreSQL.",
         )
 
@@ -508,7 +509,11 @@ class InterviewModerationPolicyTests(unittest.TestCase):
 
         for last_turn in (final_turn, blocked_turn):
             with self.subTest(turn_id=last_turn.turn_id):
-                state = GemmaInterview._rebuild_state([], last_turn)
+                state = GemmaInterview._rebuild_state(
+                    [],
+                    last_turn,
+                    anonymized_cv="CV anonimizzato",
+                )
                 self.assertTrue(state.is_closed)
 
     def test_rejects_phase_mismatch_and_unexpected_turn_id(self):

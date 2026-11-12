@@ -45,19 +45,23 @@ class InterviewSchemaTests(unittest.TestCase):
 		}
 
 		request = InterviewRequest(
+			anonymized_cv="CV anonimizzato",
 			selected_position="Sviluppatore web React",
 			level_position="junior",
 			profile=profile,
 		)
 		self.assertEqual(request.level_position, "junior")
+		self.assertEqual(request.anonymized_cv, "CV anonimizzato")
 
 		with self.assertRaises(ValidationError):
 			InterviewRequest(
 				selected_position="Sviluppatore web React",
+				level_position="junior",
 				profile=profile,
 			)
 		with self.assertRaises(ValidationError):
 			InterviewRequest(
+				anonymized_cv="CV anonimizzato",
 				selected_position="Sviluppatore web React",
 				level_position="expert",
 				profile=profile,

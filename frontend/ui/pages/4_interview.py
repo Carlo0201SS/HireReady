@@ -166,6 +166,7 @@ if "interview_turn" not in st.session_state:
         with st.spinner("Preparazione della prima domanda…"):
             try:
                 response = api_client.interview(
+                    anonymized_cv=context["anonymized_cv"],
                     selected_position=context["selected_position"],
                     level_position=level_position,
                     position_description=context.get("position_description", ""),
@@ -285,6 +286,7 @@ if invia:
                 previous_turn = st.session_state["interview_turn"]
                 response = api_client.interview(
                     history=st.session_state["interview_history"],
+                    anonymized_cv=context["anonymized_cv"],
                     last_turn=previous_turn,
                     candidate_answer=risposta_utente.strip(),
                 )

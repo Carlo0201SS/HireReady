@@ -32,5 +32,6 @@ class CVParserOrchestrator:
 		return CVInterviewContext(
 			selected_position=selected_position,
 			position_description=position_description,
+			anonymized_cv=anonymized_cv,
 			profile=result.profile,
 		)

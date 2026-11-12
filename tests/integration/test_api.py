@@ -88,6 +88,7 @@ class HireReadyApiTests(unittest.TestCase):
 		parse_cv.return_value = {
 			"selected_position": "Sviluppatore web React",
 			"position_description": "Esperienza con API REST.",
+			"anonymized_cv": "CV anonimo",
 			"profile": {
 				"professional_summary": "Sviluppatrice web.",
 				"technical_skills": ["React", "TypeScript"],
@@ -109,6 +110,7 @@ class HireReadyApiTests(unittest.TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.json()["selected_position"], "Sviluppatore web React")
 		self.assertEqual(response.json()["position_description"], "Esperienza con API REST.")
+		self.assertEqual(response.json()["anonymized_cv"], "CV anonimo")
 		self.assertEqual(response.json()["profile"]["technical_skills"], ["React", "TypeScript"])
 		parse_cv.assert_called_once_with(
 			anonymized_cv="CV anonimo",

@@ -29,4 +29,5 @@ class CVInterviewContext(BaseModel):
 
 	selected_position: str = Field(min_length=1)
 	position_description: str = ""
+	anonymized_cv: str = Field(min_length=1)
 	profile: CVParsedProfile

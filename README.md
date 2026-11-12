@@ -32,6 +32,6 @@ Il frontend avvia l'anonimizzazione in background dopo l'estrazione del CV. L'ut
 
 ## Modello di anonimizzazione (Rizzo PII)
 
-All'avvio il backend scarica in background il modello `rizzoaiacademy/rizzo-pii-0.3B` in `ai_models/` (circa 1,2 GB, solo la prima volta) e lo carica in memoria. Lo stato è visibile su `GET /api/anonymization/status` (`downloading`, `loading`, `ready`, `error`). Per disattivare il precaricamento (es. nei test) imposta `HIREREADY_PRELOAD_MODELS=0`. Download manuale: `python -m backend.manager.cv.rizzo_anonymizer --force`.
+All'avvio il backend scarica in background il modello `rizzoaiacademy/rizzo-pii-0.3B` in `ai_models/` (circa 1,2 GB, solo la prima volta) e lo carica in memoria. Lo stato è visibile su `GET /api/anonymization/status` (`downloading`, `loading`, `ready`, `error`). Il nome e cognome vengono mantenuti nel CV anonimizzato; gli altri dati personali rilevati continuano a essere censurati. Per disattivare il precaricamento (es. nei test) imposta `HIREREADY_PRELOAD_MODELS=0`. Download manuale: `python -m backend.manager.cv.rizzo_anonymizer --force`.
 
 La cartella `ai_models/` è esclusa da git: i pesi non vanno committati.
