@@ -146,6 +146,29 @@ class HireReadyApiClient:
 			},
 		)
 
+	def download_report_pdf(self, report: dict[str, Any]) -> bytes:
+		headers = {"Authorization": "******"} if self.api_key else {}
+		try:
+			response = requests.request(
+				"POST",
+				f"{self.base_url}/api/report/pdf",
+				timeout=self.timeout,
+				headers=headers,
+				json=report,
+			)
+		except requests.RequestException as error:
+			raise BackendApiError(
+				"Backend HireReady non raggiungibile. Verifica che FastAPI sia avviato."
+			) from error
+
+		if not response.ok:
+			try:
+				detail = response.json().get("detail", "Richiesta non riuscita.")
+			except (ValueError, AttributeError):
+				detail = "Richiesta non riuscita."
+			raise BackendApiError(str(detail))
+		return response.content
+
 	# ------------------------------------------------------------------
 	# Utility
 	# ------------------------------------------------------------------
@@ -160,6 +183,15 @@ class HireReadyApiClient:
 			turn.get("is_final")
 			or is_meaningful.get("azione") == "blocca"
 			or language != "italiano"
+		)
+
+	@staticmethod
+	def is_final_turn(turn: dict | None) -> bool:
+		return bool(
+			turn
+			and turn.get("phase") == "finale"
+			and turn.get("is_final") is True
+			and turn.get("closure_reason") is None
 		)
 
 	@staticmethod
@@ -181,11 +213,14 @@ class HireReadyApiClient:
 				f"Motivo: {is_meaningful.get('motivazione', 'motivo non specificato')}"
 			)
 
-		if turn.get("is_final"):
+		if turn.get("closure_reason") == "profile_contradiction":
 			return (
-				"Grazie per il colloquio. La valutazione finale è disponibile "
-				"presso il team di selezione."
+				"Il colloquio è stato interrotto perché sono emerse informazioni "
+				"incompatibili tra il profilo e le risposte. Sarà necessaria una verifica."
 			)
+
+		if HireReadyApiClient.is_final_turn(turn):
+			return "Grazie per aver partecipato al colloquio!"
 
 		next_question = turn.get("next_question")
 		if next_question and next_question.get("text"):

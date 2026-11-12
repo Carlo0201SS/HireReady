@@ -62,6 +62,50 @@ class HireReadyApiClientTests(unittest.TestCase):
 			)
 		)
 
+	def test_final_message_requires_final_phase_and_flag(self):
+		final_turn = {"phase": "finale", "is_final": True}
+		self.assertTrue(HireReadyApiClient.is_final_turn(final_turn))
+		self.assertEqual(
+			HireReadyApiClient.turn_message(final_turn),
+			"Grazie per aver partecipato al colloquio!",
+		)
+		self.assertFalse(
+			HireReadyApiClient.is_final_turn(
+				{"phase": "tecnica", "is_final": True}
+			)
+		)
+		self.assertFalse(
+			HireReadyApiClient.is_final_turn(
+				{"phase": "finale", "is_final": False}
+			)
+		)
+		self.assertFalse(
+			HireReadyApiClient.is_final_turn(
+				{
+					"phase": "finale",
+					"is_final": True,
+					"closure_reason": "profile_contradiction",
+				}
+			)
+		)
+		self.assertIn(
+			"informazioni incompatibili",
+			HireReadyApiClient.turn_message(
+				{
+					"phase": "finale",
+					"is_final": True,
+					"closure_reason": "profile_contradiction",
+					"is_meaningful": {"azione": "prosegui"},
+				}
+			),
+		)
+		self.assertEqual(
+			HireReadyApiClient.turn_message(
+				{"phase": "tecnica", "is_final": True}
+			),
+			"In attesa della prossima domanda…",
+		)
+
 	@patch("frontend.api_client.requests.request")
 	def test_posts_anonymized_cv_and_selected_position_for_parsing(self, request):
 		response = Mock(ok=True)
@@ -151,6 +195,29 @@ class HireReadyApiClientTests(unittest.TestCase):
 				"score": None,
 			},
 		)
+
+	@patch("frontend.api_client.requests.request")
+	def test_downloads_interview_report_pdf(self, request):
+		response = Mock(ok=True, content=b"%PDF-report")
+		request.return_value = response
+		client = HireReadyApiClient("http://127.0.0.1:8010")
+		report = {
+			"summary": "Report.",
+			"intervention_points": [],
+			"contenuto": "",
+			"answers": [],
+			"score": None,
+		}
+
+		pdf = client.download_report_pdf(report)
+
+		self.assertEqual(pdf, b"%PDF-report")
+		args, kwargs = request.call_args
+		self.assertEqual(
+			args[:2],
+			("POST", "http://127.0.0.1:8010/api/report/pdf"),
+		)
+		self.assertEqual(kwargs["json"], report)
 
 
 if __name__ == "__main__":

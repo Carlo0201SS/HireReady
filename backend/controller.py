@@ -21,6 +21,7 @@ from backend.manager.cv.rizzo_anonymizer import RizzoAnonymizer
 from backend.manager.llm.gemma_cv_parser import GemmaCVParser
 from backend.manager.llm.gemma_interview import GemmaInterview, InterviewState
 from backend.manager.llm.gemma_report import GemmaInterviewReporter
+from backend.manager.report.reportlab_pdf_renderer import ReportLabPdfRenderer
 
 
 _ANONYMIZATION_EXECUTOR = ThreadPoolExecutor(
@@ -188,3 +189,12 @@ def generate_interview_report(
 		answers=request.answers,
 		score=request.score,
 	)
+
+
+@lru_cache(maxsize=1)
+def _report_pdf_renderer() -> ReportLabPdfRenderer:
+	return ReportLabPdfRenderer()
+
+
+def generate_report_pdf(report: InterviewReportResponse) -> bytes:
+	return _report_pdf_renderer().render(report)

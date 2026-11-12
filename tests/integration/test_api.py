@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from backend.api import app
 from backend.domain.models.report_model import InterviewSummary
+from backend.manager.report.reportlab_pdf_renderer import ReportPdfRendererUnavailable
 
 
 class HireReadyApiTests(unittest.TestCase):
@@ -55,6 +56,21 @@ class HireReadyApiTests(unittest.TestCase):
 
 		self.assertEqual(response.status_code, 415)
 		self.assertIn("PDF o DOCX", response.json()["detail"])
+
+	@patch("backend.api.extract_cv_text", side_effect=RuntimeError("Invalid PDF data"))
+	def test_extract_endpoint_logs_unexpected_extraction_errors(self, extract_text):
+		with self.assertLogs("backend.api", level="ERROR") as captured:
+			response = self.client.post(
+				"/api/cv/extract",
+				files={"file": ("candidate.pdf", b"pdf bytes", "application/pdf")},
+			)
+
+		self.assertEqual(response.status_code, 422)
+		self.assertEqual(
+			response.json()["detail"],
+			"Impossibile estrarre il testo dal documento caricato.",
+		)
+		self.assertIn("Invalid PDF data", "\n".join(captured.output))
 
 	@patch("backend.api.anonymize_cv", return_value="[PERSON], [EMAIL]")
 	def test_anonymize_endpoint(self, anonymize):
@@ -206,6 +222,45 @@ class HireReadyApiTests(unittest.TestCase):
 		)
 
 		self.assertEqual(response.status_code, 422)
+
+	@patch("backend.api.generate_report_pdf", return_value=b"%PDF-report")
+	def test_interview_report_pdf_endpoint_returns_downloadable_pdf(self, generate_pdf):
+		report = {
+			"summary": "Il candidato ha esperienza con Python.",
+			"intervention_points": [],
+			"contenuto": "Il colloquio è terminato regolarmente.",
+			"answers": [],
+			"score": 8.5,
+		}
+
+		response = self.client.post("/api/report/pdf", json=report)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.content, b"%PDF-report")
+		self.assertEqual(response.headers["content-type"], "application/pdf")
+		self.assertIn("attachment; filename=", response.headers["content-disposition"])
+		generate_pdf.assert_called_once()
+
+	@patch(
+		"backend.api.generate_report_pdf",
+		side_effect=ReportPdfRendererUnavailable(
+			"ReportLab non è installato nell'ambiente Python del backend."
+		),
+	)
+	def test_interview_report_pdf_explains_missing_native_dependency(self, generate_pdf):
+		response = self.client.post(
+			"/api/report/pdf",
+			json={
+				"summary": "Report.",
+				"intervention_points": [],
+				"contenuto": "",
+				"answers": [],
+				"score": None,
+			},
+		)
+
+		self.assertEqual(response.status_code, 503)
+		self.assertIn("ReportLab non è installato", response.json()["detail"])
 
 
 if __name__ == "__main__":

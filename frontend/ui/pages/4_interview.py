@@ -94,6 +94,12 @@ st.markdown(
         font-weight: 400;
         margin-top: 6px;
     }
+    .fase-badge--blocked {
+        background-color: #ffc9c9;
+    }
+    .fase-badge--score {
+        background-color: #c8f7c5;
+    }
     .briefing-box {
         background-color: #f6f8fb;
         border: 1px solid #dde5ef;
@@ -223,14 +229,14 @@ if is_meaningful.get("azione") == "blocca":
     score = evaluation.get("score")
     score_text = f" · {score}/10" if score is not None else ""
     st.markdown(
-        f'<div class="fase-badge" style="background:#ffc9c9;">'
+        f'<div class="fase-badge fase-badge--blocked">'
         f'❌ Risposta non adeguata{score_text}</div>',
         unsafe_allow_html=True,
     )
 elif current_turn.get("evaluation_of_previous_answer") is not None:
     ev = current_turn["evaluation_of_previous_answer"]
     st.markdown(
-        f'<div class="fase-badge" style="background:#c8f7c5;">'
+        f'<div class="fase-badge fase-badge--score">'
         f'✅ Risposta precedente: {ev.get("score", "—")}/10</div>',
         unsafe_allow_html=True,
     )
@@ -240,13 +246,15 @@ elif current_turn.get("evaluation_of_previous_answer") is not None:
 # AREA RISPOSTA UTENTE
 # ----------------------------------------------------------------------
 if is_closed:
-    st.info("Il colloquio è concluso.")
-    if (
-        is_meaningful.get("azione") != "blocca"
-        and is_meaningful.get("lingua", "").strip().casefold() == "italiano"
-    ):
-        if st.button("Visualizza il report ➜", type="primary"):
+    is_normal_final_turn = api_client.is_final_turn(current_turn)
+    if is_normal_final_turn and is_meaningful.get("azione") != "blocca":
+        st.success("Grazie per aver partecipato al colloquio!")
+        if st.button("Genera il report del colloquio ➜", type="primary"):
             st.switch_page(str(Path(__file__).resolve().with_name("5_report.py")))
+    elif current_turn.get("closure_reason") == "profile_contradiction":
+        st.warning(api_client.turn_message(current_turn))
+    else:
+        st.info("Il colloquio è concluso.")
     st.stop()
 
 st.markdown('<div class="label-rispondi">La tua risposta</div>', unsafe_allow_html=True)
@@ -287,7 +295,8 @@ if invia:
         next_question = previous_turn.get("next_question") or {}
         evaluation = evaluated_turn.get("evaluation_of_previous_answer") or {}
         meaningful = evaluated_turn.get("is_meaningful") or {}
-        if evaluated_turn.get("turn_id") != 11 and next_question.get("text"):
+        is_final_turn = api_client.is_final_turn(evaluated_turn)
+        if not is_final_turn and next_question.get("text"):
             answers = st.session_state.setdefault("interview_report_answers", [])
             answers.append(
                 {

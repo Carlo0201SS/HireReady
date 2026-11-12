@@ -89,6 +89,23 @@ st.markdown(
 	unsafe_allow_html=True,
 )
 
+report_pdf = st.session_state.get("interview_report_pdf")
+if report_pdf is None:
+	try:
+		report_pdf = api_client.download_report_pdf(report)
+	except BackendApiError as error:
+		st.error(f"PDF non disponibile: {error}")
+	else:
+		st.session_state["interview_report_pdf"] = report_pdf
+if report_pdf is not None:
+	st.download_button(
+		"Scarica il report in PDF",
+		data=report_pdf,
+		file_name="report_colloquio.pdf",
+		mime="application/pdf",
+		use_container_width=True,
+	)
+
 intervention_points = report.get("intervention_points", [])
 st.subheader("Punti di intervento")
 if not intervention_points:

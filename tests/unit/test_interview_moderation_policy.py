@@ -8,9 +8,11 @@ from backend.domain.models.interview_model import HireReadyTurn
 from backend.manager.llm.gemma_interview import (
     DOMANDE_CV,
     DOMANDE_TECNICHE,
+    FINAL_TURN_ID,
     GemmaInterview,
     InterviewState,
     SYSTEM_PROMPT_TEMPLATE,
+    ULTIMO_TURNO_DOMANDA,
     _ensure_meaningful_classification,
     _is_blocked,
     _response_schema_for_turn,
@@ -27,6 +29,8 @@ class InterviewModerationPolicyTests(unittest.TestCase):
             candidate_profile="{}",
             num_domande_cv=DOMANDE_CV,
             num_domande_tecniche=DOMANDE_TECNICHE,
+            last_question_turn_id=ULTIMO_TURNO_DOMANDA,
+            final_turn_id=FINAL_TURN_ID,
         )
         self.assertIn("Esperienza con API REST.", prompt)
         self.assertIn("LIVELLO DI ESPERIENZA", prompt)
@@ -44,18 +48,45 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         self.assertIn('turn_id da 4 a 10: phase="tecnica"', prompt)
         self.assertIn('turn_id 11: phase="finale" e is_final=true', prompt)
         self.assertIn("esattamente 7 domande", prompt)
-        self.assertIn("un intero da 1 a 10", prompt)
-        self.assertIn("| Pertinenza e copertura della richiesta centrale | 0-5 |", prompt)
-        self.assertIn("| Correttezza e concretezza | 0-3 |", prompt)
-        self.assertIn("| Chiarezza e organizzazione | 0-2 |", prompt)
         self.assertIn(
-            "Valuta il significato e il collegamento effettivo con la domanda",
+            "prosegui con tutte le domande previste fino al turno 10",
             prompt,
         )
-        self.assertIn("il voto finale non può superare 5/10", prompt)
         self.assertIn(
-            "senza spiegare in che modo il progetto usa Django non soddisfa "
-            "la richiesta centrale",
+            "indipendentemente da quanto le risposte siano buone, deboli, "
+            "errate, vaghe, incomplete o non pertinenti",
+            prompt,
+        )
+        self.assertNotIn(
+            "Se le risposte continuano a non soddisfare arriva direttamente "
+            "alla fase conclusiva",
+            prompt,
+        )
+        self.assertIn("un intero da 1 a 10", prompt)
+        self.assertIn(
+            "| Pertinenza e risposta al nucleo della domanda | 0-4 |",
+            prompt,
+        )
+        self.assertIn("| Correttezza | 0-3 |", prompt)
+        self.assertIn("| Dettagli ed esempi | 0-2 |", prompt)
+        self.assertIn("| Chiarezza | 0-1 |", prompt)
+        self.assertIn(
+            "valuta esclusivamente la risposta appena ricevuta rispetto alla "
+            "domanda a cui risponde",
+            prompt,
+        )
+        self.assertIn(
+            "Una risposta breve ma diretta e corretta può ottenere un buon "
+            "punteggio",
+            prompt,
+        )
+        self.assertIn(
+            "il voto non può superare 5/10",
+            prompt,
+        )
+        self.assertIn(
+            "parlare soprattutto di LLM senza spiegare il ruolo di Django "
+            "non soddisfa il nucleo della richiesta",
             prompt,
         )
         self.assertIn("usa esattamente \"Italiano\" se è in italiano", prompt)

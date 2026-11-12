@@ -3,13 +3,14 @@ import logging
 import os
 import threading
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 
 from backend.controller import (
 	anonymization_state,
 	anonymize_cv,
 	extract_cv_text,
 	generate_interview_report,
+	generate_report_pdf,
 	interview_handle,
 	is_anonymization_available,
 	parse_cv_for_interview,
@@ -32,6 +33,7 @@ from backend.domain.models.report_model import (
 from backend.domain.models.interview_model import (
 	HireReadyTurn,
 )
+from backend.manager.report.reportlab_pdf_renderer import ReportPdfRendererUnavailable
 
 
 
@@ -69,6 +71,7 @@ def root() -> dict[str, object]:
 			"cv_anonymization": "POST /api/cv/anonymize",
 			"cv_interview_parsing": "POST /api/cv/gemma_parse",
 			"interview_report": "POST /api/report",
+			"interview_report_pdf": "POST /api/report/pdf",
 			"interview": "POST /api/interview"
 		},
 	}
@@ -98,6 +101,7 @@ async def extract_cv(file: UploadFile = File(...)) -> CVTextResponse:
     except ValueError as error:
         raise HTTPException(status_code=415, detail=str(error)) from error
     except Exception as error:
+        logger.exception("Impossibile estrarre il testo dal documento caricato.")
         raise HTTPException(
             status_code=422,
             detail="Impossibile estrarre il testo dal documento caricato.",
@@ -169,3 +173,23 @@ def interview_report(request: InterviewReportRequest) -> InterviewReportResponse
 		return generate_interview_report(request)
 	except RuntimeError as error:
 		raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.post("/api/report/pdf")
+def interview_report_pdf(request: InterviewReportResponse) -> Response:
+	try:
+		pdf = generate_report_pdf(request)
+	except ReportPdfRendererUnavailable as error:
+		logger.exception("Renderer PDF non disponibile.")
+		raise HTTPException(status_code=503, detail=str(error)) from error
+	except Exception as error:
+		logger.exception("Impossibile generare il PDF del report.")
+		raise HTTPException(
+			status_code=500,
+			detail="Impossibile generare il PDF del report.",
+		) from error
+	return Response(
+		content=pdf,
+		media_type="application/pdf",
+		headers={"Content-Disposition": 'attachment; filename="report_colloquio.pdf"'},
+	)

@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+import os
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
+
+
+try:
+    FINAL_TURN_ID = int(os.getenv("HIREREADY_FINAL_TURN_ID", "11"))
+except ValueError as error:
+    raise RuntimeError("HIREREADY_FINAL_TURN_ID deve essere un numero intero.") from error
+
+if FINAL_TURN_ID < 5:
+    raise RuntimeError("HIREREADY_FINAL_TURN_ID deve essere almeno 5.")
 
 
 class StrictModel(BaseModel):
@@ -38,7 +48,7 @@ class IsMeaningful(StrictModel):
     )
     motivazione: str = Field(
         description=(
-            "Nei turni da 1 a 10 contiene esclusivamente un consiglio di "
+            f"Nei turni da 1 a {FINAL_TURN_ID - 1} contiene esclusivamente un consiglio di "
             "miglioramento breve, concreto e specifico, preferibilmente in una "
             "sola frase; vale anche per risposte di alta qualità. Se azione='blocca', "
             "indica brevemente il motivo del blocco."
@@ -91,6 +101,12 @@ class NextQuestion(StrictModel):
     text: str = Field(..., min_length=10, description="Testo della domanda.")
 
 
+class ProfileConsistencyCheck(StrictModel):
+    status: Literal["consistent", "contradiction"]
+    current_claim: str = ""
+    conflicting_claim: str = ""
+
+
 def _require_meaningful_after_start(
     turn_id: int,
     is_meaningful: IsMeaningful | None,
@@ -116,19 +132,21 @@ class HireReadyTurn(StrictModel):
             return "cv"
         if turn_id == 3:
             return "presentazione"
-        if 4 <= turn_id <= 10:
-            return "tecnica"
-        if turn_id == 11:
+        if turn_id == FINAL_TURN_ID:
             return "finale"
-        raise ValueError("turn_id deve essere compreso tra 0 e 11.")
+        if 4 <= turn_id < FINAL_TURN_ID:
+            return "tecnica"
+        raise ValueError(
+            f"turn_id deve essere compreso tra 0 e {FINAL_TURN_ID}."
+        )
 
     turn_id: int = Field(
         ...,
         ge=0,
-        le=11,
+        le=FINAL_TURN_ID,
         description=(
-            "Numero del turno corrente: 0-2=cv, 3=presentazione, "
-            "4-10=tecnica, 11=finale."
+            f"Numero del turno corrente: 0-2=cv, 3=presentazione, "
+            f"4-{FINAL_TURN_ID - 1}=tecnica, {FINAL_TURN_ID}=finale."
         ),
     )
     phase: Literal["presentazione", "cv", "tecnica", "finale"]
@@ -141,6 +159,8 @@ class HireReadyTurn(StrictModel):
     is_meaningful: IsMeaningful | None
     evaluation_of_previous_answer: EvaluationOfPreviousAnswer | None
     next_question: NextQuestion | None
+    closure_reason: Literal["profile_contradiction"] | None = None
+    closure_evidence: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check_coerenza_finale(
@@ -154,17 +174,22 @@ class HireReadyTurn(StrictModel):
             )
 
         _require_meaningful_after_start(self.turn_id, self.is_meaningful)
-        if self.turn_id == 11 and self.evaluation_of_previous_answer is not None:
+        if (
+            self.turn_id == FINAL_TURN_ID
+            and self.evaluation_of_previous_answer is not None
+        ):
             raise ValueError(
-                "Al turno 11 evaluation_of_previous_answer deve essere null."
+                f"Al turno {FINAL_TURN_ID} evaluation_of_previous_answer "
+                "deve essere null."
             )
         if (
-            0 < self.turn_id < 11
+            0 < self.turn_id < FINAL_TURN_ID
             and self.evaluation_of_previous_answer is None
         ):
             raise ValueError(
                 "evaluation_of_previous_answer è obbligatoria dopo il turno "
-                "iniziale e fino al turno 10, e deve contenere uno score da 1 a 10."
+                f"iniziale e fino al turno {FINAL_TURN_ID - 1}, e deve "
+                "contenere uno score da 1 a 10."
             )
 
         expected_phase = self.expected_phase(self.turn_id)
@@ -173,7 +198,25 @@ class HireReadyTurn(StrictModel):
             and self.is_meaningful.azione == "blocca"
         )
 
-        # La moderazione può chiudere il colloquio prima del turno 11.
+        if self.closure_reason == "profile_contradiction":
+            if not self.is_final or self.phase != "finale" or self.next_question is not None:
+                raise ValueError(
+                    "La chiusura per contraddizione richiede phase='finale', "
+                    "is_final=true e next_question=null."
+                )
+            if len(self.closure_evidence) < 2:
+                raise ValueError(
+                    "La chiusura per contraddizione richiede almeno due "
+                    "elementi di evidenza."
+                )
+            return self
+        if self.closure_evidence:
+            raise ValueError(
+                "closure_evidence è ammessa solo per una chiusura "
+                "da contraddizione."
+            )
+
+        # La moderazione può chiudere il colloquio prima del turno finale.
         if is_blocked and self.is_final:
             if self.phase != "finale" or self.next_question is not None:
                 raise ValueError(
@@ -189,15 +232,18 @@ class HireReadyTurn(StrictModel):
             )
 
         if self.is_final:
-            if self.turn_id != 11 or self.next_question is not None:
+            if (
+                self.turn_id != FINAL_TURN_ID
+                or self.next_question is not None
+            ):
                 raise ValueError(
-                    "is_final=True è ammesso solo al turno 11, con "
+                    f"is_final=True è ammesso solo al turno {FINAL_TURN_ID}, con "
                     "next_question=null."
                 )
         else:
-            if self.turn_id == 11:
+            if self.turn_id == FINAL_TURN_ID:
                 raise ValueError(
-                    "Al turno 11 is_final deve essere true."
+                    f"Al turno {FINAL_TURN_ID} is_final deve essere true."
                 )
             if self.next_question is None:
                 raise ValueError(
