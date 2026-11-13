@@ -2,8 +2,9 @@ import html
 from pathlib import Path
 
 import streamlit as st
+from fastapi import HTTPException
 
-from frontend.api_client import BackendApiError, api_client
+from frontend.api_client import api_client
 
 
 st.set_page_config(
@@ -72,8 +73,8 @@ if report is None:
 				answers=st.session_state.get("interview_report_answers", []),
 				score=st.session_state.get("score_response"),
 			)
-		except BackendApiError as error:
-			st.error(str(error))
+		except HTTPException as error:
+			st.error(str(error.detail))
 			if st.button("Riprova"):
 				st.rerun()
 			st.stop()
@@ -93,8 +94,8 @@ report_pdf = st.session_state.get("interview_report_pdf")
 if report_pdf is None:
 	try:
 		report_pdf = api_client.download_report_pdf(report)
-	except BackendApiError as error:
-		st.error(f"PDF non disponibile: {error}")
+	except HTTPException as error:
+		st.error(f"PDF non disponibile: {error.detail}")
 	else:
 		st.session_state["interview_report_pdf"] = report_pdf
 if report_pdf is not None:

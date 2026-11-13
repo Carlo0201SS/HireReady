@@ -3,9 +3,10 @@ from hashlib import sha256
 from pathlib import Path
 
 import streamlit as st
+from fastapi import HTTPException
 
 from backend.controller import reset_interview_session, submit_anonymization
-from frontend.api_client import BackendApiError, api_client
+from frontend.api_client import api_client
 
 
 st.title("Carica il CV") 
@@ -41,9 +42,9 @@ if uploaded_file is not None:
 	if not extracted_text:
 		try:
 			extracted_text = api_client.extract_cv_text(uploaded_file.name, file_bytes)
-		except BackendApiError as error:
+		except HTTPException as error:
 			st.session_state["extracted_cv_text"] = ""
-			st.error(str(error))
+			st.error(str(error.detail))
 		except Exception as error:
 			logging.exception("Errore inatteso durante l'estrazione del CV")
 			st.session_state["extracted_cv_text"] = ""

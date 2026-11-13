@@ -2,8 +2,9 @@ import html
 from pathlib import Path
 
 import streamlit as st
+from fastapi import HTTPException
 
-from frontend.api_client import BackendApiError, api_client
+from frontend.api_client import api_client
 
 
 # ----------------------------------------------------------------------
@@ -172,8 +173,8 @@ if "interview_turn" not in st.session_state:
                     position_description=context.get("position_description", ""),
                     profile=context["profile"],
                 )
-            except BackendApiError as error:
-                st.error(str(error))
+            except HTTPException as error:
+                st.error(str(error.detail))
                 st.stop()
         st.session_state["interview_turn"] = response["turn"]
         st.session_state["interview_history"] = response["history"]
@@ -250,12 +251,12 @@ if is_closed:
     is_normal_final_turn = api_client.is_final_turn(current_turn)
     if is_normal_final_turn and is_meaningful.get("azione") != "blocca":
         st.success("Grazie per aver partecipato al colloquio!")
-        if st.button("Genera il report del colloquio ➜", type="primary"):
-            st.switch_page(str(Path(__file__).resolve().with_name("5_report.py")))
     elif current_turn.get("closure_reason") == "profile_contradiction":
         st.warning(api_client.turn_message(current_turn))
     else:
         st.info("Il colloquio è concluso.")
+    if st.button("Visualizza report del colloquio ➜", type="primary"):
+        st.switch_page(str(Path(__file__).resolve().with_name("5_report.py")))
     st.stop()
 
 st.markdown('<div class="label-rispondi">La tua risposta</div>', unsafe_allow_html=True)
@@ -290,15 +291,14 @@ if invia:
                     last_turn=previous_turn,
                     candidate_answer=risposta_utente.strip(),
                 )
-            except BackendApiError as error:
-                st.error(str(error))
+            except HTTPException as error:
+                st.error(str(error.detail))
                 st.stop()
         evaluated_turn = response["turn"]
         next_question = previous_turn.get("next_question") or {}
         evaluation = evaluated_turn.get("evaluation_of_previous_answer") or {}
         meaningful = evaluated_turn.get("is_meaningful") or {}
-        is_final_turn = api_client.is_final_turn(evaluated_turn)
-        if not is_final_turn and next_question.get("text"):
+        if next_question.get("text"):
             answers = st.session_state.setdefault("interview_report_answers", [])
             answers.append(
                 {
@@ -306,9 +306,9 @@ if invia:
                     "answer": risposta_utente.strip(),
                     "motivation": meaningful.get(
                         "motivazione",
-                        "Nessuna motivazione fornita.",
+                        "Risposta non valutata prima della chiusura.",
                     ),
-                    "score": evaluation["score"],
+                    "score": evaluation.get("score"),
                 }
             )
 

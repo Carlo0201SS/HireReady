@@ -2,24 +2,53 @@ from __future__ import annotations
 
 import os
 from typing import TYPE_CHECKING, Any
+
 import requests
+from fastapi import HTTPException
 
 if TYPE_CHECKING:
 	from backend.domain.models.cv_model import CVParsedProfile
 	from backend.domain.models.interview_model import HireReadyTurn
 
 
-class BackendApiError(RuntimeError):
-	pass
-
-
 class HireReadyApiClient:
-	def __init__(self, base_url: str | None = None, timeout: float = 80, api_key: str | None = None) -> None:
+	def __init__(self, base_url: str | None = None, timeout: float = 120, api_key: str | None = None) -> None:
 		self.base_url = (
 			base_url or os.getenv("HIREREADY_API_BASE_URL", "http://127.0.0.1:8000")
 		).rstrip("/")
 		self.timeout = timeout
 		self.api_key = api_key if api_key is not None else os.getenv("HIREREADY_API_KEY", "")
+
+	@staticmethod
+	def _raise_for_http_error(response: requests.Response) -> None:
+		status_code = response.status_code
+		if 300 <= status_code < 400:
+			category = "Reindirizzamento HTTP"
+		elif 400 <= status_code < 500:
+			category = "Errore client HTTP"
+		elif 500 <= status_code < 600:
+			category = "Errore server HTTP"
+		elif not 200 <= status_code < 300:
+			raise HTTPException(
+				status_code=502,
+				detail=f"Status HTTP inatteso {status_code}: {response.text or response.reason}",
+			)
+		else:
+			return
+
+		try:
+			error_body = response.json()
+		except ValueError as error:
+			detail = response.text or f"{type(error).__name__}: {error}"
+		else:
+			if isinstance(error_body, dict):
+				detail = error_body.get("detail", response.text or response.reason)
+			else:
+				detail = response.text or response.reason
+		raise HTTPException(
+			status_code=status_code,
+			detail=f"{category} {status_code}: {detail}",
+		)
 
 	def _request(self, method: str, path: str, **kwargs) -> dict:
 		headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
@@ -32,17 +61,24 @@ class HireReadyApiClient:
 				**kwargs,
 			)
 		except requests.RequestException as error:
-			raise BackendApiError(
-				"Backend HireReady non raggiungibile. Verifica che FastAPI sia avviato."
+			raise HTTPException(
+				status_code=503,
+				detail=f"{type(error).__name__}: {error}",
+			) from error
+		except Exception as error:
+			raise HTTPException(
+				status_code=500,
+				detail=f"{type(error).__name__}: {error}",
 			) from error
 
-		if not response.ok:
-			try:
-				detail = response.json().get("detail", "Richiesta non riuscita.")
-			except (ValueError, AttributeError):
-				detail = "Richiesta non riuscita."
-			raise BackendApiError(str(detail))
-		return response.json()
+		self._raise_for_http_error(response)
+		try:
+			return response.json()
+		except Exception as error:
+			raise HTTPException(
+				status_code=502,
+				detail=f"{type(error).__name__}: {error}",
+			) from error
 
 	# ------------------------------------------------------------------
 	# CV
@@ -163,16 +199,17 @@ class HireReadyApiClient:
 				json=report,
 			)
 		except requests.RequestException as error:
-			raise BackendApiError(
-				"Backend HireReady non raggiungibile. Verifica che FastAPI sia avviato."
+			raise HTTPException(
+				status_code=503,
+				detail=f"{type(error).__name__}: {error}",
+			) from error
+		except Exception as error:
+			raise HTTPException(
+				status_code=500,
+				detail=f"{type(error).__name__}: {error}",
 			) from error
 
-		if not response.ok:
-			try:
-				detail = response.json().get("detail", "Richiesta non riuscita.")
-			except (ValueError, AttributeError):
-				detail = "Richiesta non riuscita."
-			raise BackendApiError(str(detail))
+		self._raise_for_http_error(response)
 		return response.content
 
 	# ------------------------------------------------------------------

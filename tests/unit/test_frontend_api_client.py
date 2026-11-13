@@ -2,14 +2,15 @@ import unittest
 from unittest.mock import Mock, patch
 
 import requests
+from fastapi import HTTPException
 
-from interops.api_client import BackendApiError, HireReadyApiClient
+from interops.api_client import HireReadyApiClient
 
 
 class HireReadyApiClientTests(unittest.TestCase):
 	@patch("frontend.api_client.requests.request")
 	def test_uploads_document_to_backend(self, request):
-		response = Mock(ok=True)
+		response = Mock(ok=True, status_code=200)
 		response.json.return_value = {"text": "CV estratto"}
 		request.return_value = response
 		client = HireReadyApiClient("http://127.0.0.1:8010")
@@ -24,19 +25,101 @@ class HireReadyApiClientTests(unittest.TestCase):
 	@patch("frontend.api_client.requests.request")
 	def test_returns_backend_error_detail(self, request):
 		response = Mock(ok=False)
+		response.status_code = 422
 		response.json.return_value = {"detail": "Modello non disponibile"}
 		request.return_value = response
 		client = HireReadyApiClient()
 
-		with self.assertRaisesRegex(BackendApiError, "Modello non disponibile"):
+		with self.assertRaises(HTTPException) as raised:
 			client.anonymization_available()
 
-	@patch("frontend.api_client.requests.request", side_effect=requests.ConnectionError)
+		self.assertEqual(raised.exception.status_code, 422)
+		self.assertEqual(
+			raised.exception.detail,
+			"Errore client HTTP 422: Modello non disponibile",
+		)
+
+	def test_classifies_redirect_client_and_server_http_errors(self):
+		client = HireReadyApiClient()
+		for status_code, category in (
+			(302, "Reindirizzamento HTTP"),
+			(404, "Errore client HTTP"),
+			(503, "Errore server HTTP"),
+		):
+			with self.subTest(status_code=status_code):
+				response = Mock(
+					status_code=status_code,
+					text="dettaglio originato dal server",
+					reason="",
+				)
+				response.json.side_effect = ValueError("non JSON")
+
+				with self.assertRaises(HTTPException) as raised:
+					client._raise_for_http_error(response)
+
+				self.assertEqual(raised.exception.status_code, status_code)
+				self.assertEqual(
+					raised.exception.detail,
+					f"{category} {status_code}: dettaglio originato dal server",
+				)
+
+	@patch(
+		"frontend.api_client.requests.request",
+		side_effect=requests.ConnectionError("connection refused"),
+	)
 	def test_reports_backend_unavailable(self, request):
 		client = HireReadyApiClient()
 
-		with self.assertRaisesRegex(BackendApiError, "FastAPI sia avviato"):
+		with self.assertRaises(HTTPException) as raised:
 			client.anonymize_cv("CV")
+
+		self.assertEqual(raised.exception.status_code, 503)
+		self.assertIn("connection refused", raised.exception.detail)
+
+	@patch("frontend.api_client.requests.request")
+	def test_pdf_download_preserves_backend_http_status_and_detail(self, request):
+		response = Mock(ok=False, status_code=500)
+		response.json.return_value = {"detail": "Errore interno del backend"}
+		request.return_value = response
+		client = HireReadyApiClient()
+
+		with self.assertRaises(HTTPException) as raised:
+			client.download_report_pdf({})
+
+		self.assertEqual(raised.exception.status_code, 500)
+		self.assertEqual(
+			raised.exception.detail,
+			"Errore server HTTP 500: Errore interno del backend",
+		)
+
+	@patch(
+		"frontend.api_client.requests.request",
+		side_effect=ValueError("invalid request configuration"),
+	)
+	def test_unexpected_request_error_exposes_original_exception(self, request):
+		client = HireReadyApiClient()
+
+		with self.assertRaises(HTTPException) as raised:
+			client.anonymize_cv("CV")
+
+		self.assertEqual(raised.exception.status_code, 500)
+		self.assertEqual(
+			raised.exception.detail,
+			"ValueError: invalid request configuration",
+		)
+
+	@patch("frontend.api_client.requests.request")
+	def test_invalid_success_response_exposes_json_error(self, request):
+		response = Mock(ok=True, status_code=200)
+		response.json.side_effect = ValueError("invalid JSON payload")
+		request.return_value = response
+		client = HireReadyApiClient()
+
+		with self.assertRaises(HTTPException) as raised:
+			client.anonymization_status()
+
+		self.assertEqual(raised.exception.status_code, 502)
+		self.assertEqual(raised.exception.detail, "ValueError: invalid JSON payload")
 
 	def test_interview_closes_when_answer_language_is_not_italian(self):
 		self.assertTrue(
@@ -108,7 +191,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 
 	@patch("frontend.api_client.requests.request")
 	def test_posts_anonymized_cv_and_selected_position_for_parsing(self, request):
-		response = Mock(ok=True)
+		response = Mock(ok=True, status_code=200)
 		response.json.return_value = {
 			"selected_position": "ML Engineer",
 			"anonymized_cv": "CV [PERSON]",
@@ -138,7 +221,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 
 	@patch("frontend.api_client.requests.request")
 	def test_posts_position_description_when_starting_interview(self, request):
-		response = Mock(ok=True)
+		response = Mock(ok=True, status_code=200)
 		response.json.return_value = {"turn": {}, "history": [], "is_closed": False}
 		request.return_value = response
 		client = HireReadyApiClient()
@@ -166,7 +249,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 
 	@patch("frontend.api_client.requests.request")
 	def test_posts_anonymized_cv_with_each_follow_up_turn(self, request):
-		response = Mock(ok=True)
+		response = Mock(ok=True, status_code=200)
 		response.json.return_value = {"turn": {}, "history": [], "is_closed": False}
 		request.return_value = response
 		client = HireReadyApiClient()
@@ -190,7 +273,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 
 	@patch("frontend.api_client.requests.request")
 	def test_posts_interview_report_data(self, request):
-		response = Mock(ok=True)
+		response = Mock(ok=True, status_code=200)
 		response.json.return_value = {"summary": "Esperienza in Python.", "answers": []}
 		request.return_value = response
 		client = HireReadyApiClient()
@@ -226,7 +309,7 @@ class HireReadyApiClientTests(unittest.TestCase):
 
 	@patch("frontend.api_client.requests.request")
 	def test_downloads_interview_report_pdf(self, request):
-		response = Mock(ok=True, content=b"%PDF-report")
+		response = Mock(ok=True, status_code=200, content=b"%PDF-report")
 		request.return_value = response
 		client = HireReadyApiClient("http://127.0.0.1:8010")
 		report = {
