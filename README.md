@@ -1,37 +1,42 @@
 # HireReady
-.
 
-## Avvio
+## Installazione e avvio
 
-Backend e frontend si avviano in due terminali dalla cartella radice del progetto.
+1. **Prepara l'ambiente.** Installa Python 3.12 o successivo e, facoltativamente, [uv](https://docs.astral.sh/uv/). Apri PowerShell nella cartella del progetto.
 
-Terminale backend:
+2. **Installa le dipendenze.** Con uv:
 
-```powershell
-$env:HIREREADY_FINAL_TURN_ID = "11"
-python -m uvicorn backend.api:app --host 127.0.0.1 --port 8000 --reload
-```
+   ```powershell
+   uv sync
+   ```
 
-Terminale frontend:
+   In alternativa, crea un ambiente virtuale e installa i pacchetti con pip:
 
-```powershell
-streamlit run frontend/app.py
-```
+   ```powershell
+   py -3.12 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   python -m pip install -r requirements.txt
+   ```
 
-Per cambiare l'indirizzo del backend nel frontend, imposta `HIREREADY_API_BASE_URL`. La documentazione interattiva degli endpoint FastAPI e' disponibile su `http://127.0.0.1:8000/docs`.
+3. **Prepara il modello linguistico.** Installa LM Studio, scarica un modello chat compatibile e avvia il server locale. HireReady usa per impostazione predefinita `http://127.0.0.1:1234` e il modello per la quale HireReady è stato configurato e messo a punto è `google/gemma-4-e2b`; se necessario configura `LM_STUDIO_BASE_URL`, `LM_STUDIO_MODEL` e `LM_STUDIO_API_KEY` nell'ambiente del backend.
 
-`HIREREADY_FINAL_TURN_ID` controlla il turno di chiusura del colloquio (default `11`, minimo `5`). Impostalo prima di avviare il backend; il valore `11` mantiene il flusso standard di 3 turni CV, 1 di presentazione e 7 tecnici.
+4. **Avvia il backend.** In un terminale PowerShell, dalla cartella del progetto:
 
-Gli endpoint correnti sono `GET /api/health`, `GET /api/anonymization/status`, `POST /api/cv/extract`, `POST /api/cv/anonymize`, `POST /api/cv/gemma_parse`, `POST /api/interview`, `POST /api/report` e `POST /api/report/pdf`.
+   ```powershell
+   $env:HIREREADY_FINAL_TURN_ID = "11"
+   uv run uvicorn backend.api:app --host 127.0.0.1 --port 8000 --reload
+   ```
 
-`POST /api/cv/gemma_parse` riceve `anonymized_cv` e `selected_position`, quindi restituisce `selected_position` e un profilo strutturato (`professional_summary`, `technical_skills`, `relevant_experience`, `education`, `certifications`, `interview_focus`). La UI conserva il risultato in `st.session_state` per i passaggi futuri; in questa fase non viene generata una chat né scritto un record su database.
+   Se hai installato le dipendenze con pip, attiva prima l'ambiente virtuale e sostituisci `uv run uvicorn` con `python -m uvicorn`. Al primo avvio il backend scarica e prepara automaticamente il modello locale di anonimizzazione; è necessaria una connessione Internet e il download può richiedere tempo.
 
-Al termine del colloquio, `POST /api/report` riceve la cronologia (`history`), la motivazione conclusiva (`contenuto`) e le risposte valutate (`answers`, con domanda, risposta, motivazione e punteggio da 1 a 10). Il riepilogo è generato da Gemma; la pagina Report mostra il riepilogo e il dettaglio di ogni risposta. Se una risposta contiene anni espliciti confrontabili con il profilo o con risposte precedenti, un controllo dedicato verifica le cronologie lavorative. Il colloquio viene interrotto per contraddizione solo se il verificatore trova due citazioni letterali incompatibili; informazioni mancanti o ambigue sono classificate come non verificabili. `POST /api/report/pdf` riceve il report generato e restituisce il PDF pronto per il download usando ReportLab, senza dipendenze native GTK/Pango su Windows.
+5. **Avvia l'interfaccia.** In un secondo terminale, dalla cartella del progetto:
 
-Il frontend avvia l'anonimizzazione in background dopo l'estrazione del CV. L'utente può scegliere la posizione mentre il modello lavora; l'analisi del CV per la posizione selezionata attende il completamento dell'anonimizzazione.
+   ```powershell
+   uv run streamlit run frontend/app.py
+   ```
 
-## Modello di anonimizzazione (Rizzo PII)
+   Con pip, attiva l'ambiente virtuale e usa `streamlit run frontend/app.py`. Apri nel browser l'indirizzo locale mostrato da Streamlit.
 
-All'avvio il backend scarica in background il modello `rizzoaiacademy/rizzo-pii-0.3B` in `ai_models/` (circa 1,2 GB, solo la prima volta) e lo carica in memoria. Lo stato è visibile su `GET /api/anonymization/status` (`downloading`, `loading`, `ready`, `error`). Il nome e cognome vengono mantenuti nel CV anonimizzato; gli altri dati personali rilevati continuano a essere censurati. Per disattivare il precaricamento (es. nei test) imposta `HIREREADY_PRELOAD_MODELS=0`. Download manuale: `python -m backend.manager.cv.rizzo_anonymizer --force`.
+## Funzionamento
 
-La cartella `ai_models/` è esclusa da git: i pesi non vanno committati.
+HireReady aiuta a prepararsi a un colloquio di lavoro: estrae e analizza il CV, adatta le domande alla posizione e conduce un'intervista guidata. Le risposte vengono valutate e confrontate con le informazioni del CV per evidenziare eventuali incoerenze; al termine viene preparato un riepilogo con risultati e suggerimenti, scaricabile anche in PDF.

@@ -290,6 +290,46 @@ class EmploymentConsistencyTests(unittest.TestCase):
 		self.assertEqual(result.status, "consistent")
 		client.chat_completions.assert_called_once()
 
+	def test_allows_candidate_to_add_details_missing_from_cv_summary(self):
+		client = Mock()
+		client.chat_completions.return_value = (
+			200,
+			json.dumps(
+				{
+					"choices": [
+						{
+							"message": {
+								"content": json.dumps(
+									{
+										"status": "consistent",
+										"current_claim": "",
+										"conflicting_claim": "",
+									}
+								)
+							}
+						}
+					]
+				}
+			),
+		)
+		interview = GemmaInterview(lm_studio=client, model="test")
+		cv_summary = "Sviluppatore frontend presso Acme."
+		candidate_answer = (
+			"Presso Acme ho seguito il redesign del portale, implementando "
+			"componenti React e test automatici."
+		)
+
+		result = interview._check_profile_consistency(
+			state=InterviewState(anonymized_cv=cv_summary),
+			candidate_answer=candidate_answer,
+		)
+
+		self.assertEqual(result.status, "consistent")
+		prompt = client.chat_completions.call_args.args[1][0]["content"]
+		self.assertIn("dettagli aggiuntivi", prompt)
+		self.assertIn("NON sono contraddizioni", prompt)
+		self.assertIn("In caso di dubbio o ambiguità usa 'consistent'", prompt)
+
 	def test_checks_education_certification_and_relevant_experience_claims(self):
 		cases = (
 			(
@@ -400,8 +440,11 @@ class EmploymentConsistencyTests(unittest.TestCase):
 			},
 		)
 		prompt = client.chat_completions.call_args.args[1][0]["content"]
-		self.assertIn("devi usare 'contradiction'", prompt)
-		self.assertIn("Vale anche per nomi e cognomi diversi", prompt)
+		self.assertIn(
+			"Usa 'contradiction' esclusivamente quando le due affermazioni",
+			prompt,
+		)
+		self.assertIn("dichiarare un nome diverso", prompt)
 
 
 if __name__ == "__main__":
