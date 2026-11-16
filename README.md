@@ -18,14 +18,16 @@
    python -m pip install -r requirements.txt
    ```
 
-3. **Prepara il modello linguistico.** Installa LM Studio, scarica un modello chat compatibile e avvia il server locale. HireReady usa per impostazione predefinita `http://127.0.0.1:1234` e il modello per la quale HireReady è stato configurato e messo a punto è `google/gemma-4-e2b`; se necessario configura `LM_STUDIO_BASE_URL`, `LM_STUDIO_MODEL` e `LM_STUDIO_API_KEY` nell'ambiente del backend.
+3. **Prepara il modello linguistico.** Installa LM Studio, scarica un modello chat compatibile e avvia il server locale. HireReady usa per impostazione predefinita `http://127.0.0.1:1234` e il modello per la quale HireReady è stato configurato e messo a punto è `google/gemma-4-e2b`; se necessario configura `LM_STUDIO_BASE_URL`, `LM_STUDIO_MODEL` e `LM_STUDIO_API_KEY` nell'ambiente del backend. Il contesto inviato al modello conserva il prompt di sistema e gli ultimi 6 scambi domanda/risposta; puoi modificarne il numero impostando `HIREREADY_INTERVIEW_HISTORY_WINDOW` a un intero maggiore o uguale a 1.
 
 4. **Avvia il backend.** In un terminale PowerShell, dalla cartella del progetto:
 
    ```powershell
-   $env:HIREREADY_FINAL_TURN_ID = "11"
+   $env:HIREREADY_FINAL_TURN_ID = "20"
    uv run uvicorn backend.api:app --host 127.0.0.1 --port 8000 --reload
    ```
+
+   Il colloquio prevede 20 domande: 5 sul CV (turni 0–4), 6 sul percorso e sull'integrazione con il ruolo (turni 5–10) e 9 tecniche (turni 11–19). Il turno 20 è dedicato alla chiusura.
 
    Se hai installato le dipendenze con pip, attiva prima l'ambiente virtuale e sostituisci `uv run uvicorn` con `python -m uvicorn`. Al primo avvio il backend scarica e prepara automaticamente il modello locale di anonimizzazione; è necessaria una connessione Internet e il download può richiedere tempo.
 

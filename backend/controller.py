@@ -1,6 +1,7 @@
 from collections.abc import MutableMapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import lru_cache
+import os
 from typing import Any, Callable, Mapping
 
 from backend.application.anonymization_service import AnonymizationService
@@ -35,6 +36,10 @@ _INTERVIEW_SESSION_KEYS = (
 	"interview_report_answers",
 	"interview_report",
 	"answer_counter",
+)
+_REPORT_DIRECTORY = os.path.join(
+	os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+	"report",
 )
 
 
@@ -202,3 +207,26 @@ def _report_pdf_renderer() -> ReportLabPdfRenderer:
 
 def generate_report_pdf(report: InterviewReportResponse) -> bytes:
 	return _report_pdf_renderer().render(report)
+
+
+def save_report_pdf(pdf: bytes) -> str:
+	os.makedirs(_REPORT_DIRECTORY, exist_ok=True)
+	filename_prefix = "report_colloquio_"
+	existing_indices = []
+	for existing_filename in os.listdir(_REPORT_DIRECTORY):
+		if existing_filename.startswith(filename_prefix) and existing_filename.endswith(
+			".pdf"
+		):
+			index_text = existing_filename[len(filename_prefix) : -len(".pdf")]
+			if index_text.isdigit():
+				existing_indices.append(int(index_text))
+	index = max(existing_indices, default=0) + 1
+	while True:
+		filename = f"{filename_prefix}{index}.pdf"
+		file_path = os.path.join(_REPORT_DIRECTORY, filename)
+		try:
+			with open(file_path, "xb") as report_file:
+				report_file.write(pdf)
+			return filename
+		except FileExistsError:
+			index += 1

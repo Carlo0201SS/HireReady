@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from email.message import Message
 import os
 from typing import TYPE_CHECKING, Any
 
@@ -188,7 +189,7 @@ class HireReadyApiClient:
 			},
 		)
 
-	def download_report_pdf(self, report: dict[str, Any]) -> bytes:
+	def download_report_pdf(self, report: dict[str, Any]) -> tuple[bytes, str]:
 		headers = {"Authorization": "******"} if self.api_key else {}
 		try:
 			response = requests.request(
@@ -210,7 +211,21 @@ class HireReadyApiClient:
 			) from error
 
 		self._raise_for_http_error(response)
-		return response.content
+		content_disposition = response.headers.get("Content-Disposition")
+		if not content_disposition:
+			raise HTTPException(
+				status_code=502,
+				detail="La risposta del backend non contiene il nome del PDF.",
+			)
+		disposition = Message()
+		disposition["content-disposition"] = content_disposition
+		filename = disposition.get_filename()
+		if not filename:
+			raise HTTPException(
+				status_code=502,
+				detail="La risposta del backend contiene un nome PDF non valido.",
+			)
+		return response.content, os.path.basename(filename)
 
 	# ------------------------------------------------------------------
 	# Utility

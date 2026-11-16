@@ -309,7 +309,16 @@ class HireReadyApiClientTests(unittest.TestCase):
 
 	@patch("frontend.api_client.requests.request")
 	def test_downloads_interview_report_pdf(self, request):
-		response = Mock(ok=True, status_code=200, content=b"%PDF-report")
+		response = Mock(
+			ok=True,
+			status_code=200,
+			content=b"%PDF-report",
+			headers={
+				"Content-Disposition": (
+					'attachment; filename="report_colloquio_3.pdf"'
+				)
+			},
+		)
 		request.return_value = response
 		client = HireReadyApiClient("http://127.0.0.1:8010")
 		report = {
@@ -320,15 +329,28 @@ class HireReadyApiClientTests(unittest.TestCase):
 			"score": None,
 		}
 
-		pdf = client.download_report_pdf(report)
+		pdf, filename = client.download_report_pdf(report)
 
 		self.assertEqual(pdf, b"%PDF-report")
+		self.assertEqual(filename, "report_colloquio_3.pdf")
 		args, kwargs = request.call_args
 		self.assertEqual(
 			args[:2],
 			("POST", "http://127.0.0.1:8010/api/report/pdf"),
 		)
 		self.assertEqual(kwargs["json"], report)
+
+	@patch("frontend.api_client.requests.request")
+	def test_rejects_report_pdf_response_without_download_filename(self, request):
+		request.return_value = Mock(
+			ok=True,
+			status_code=200,
+			content=b"%PDF-report",
+			headers={},
+		)
+
+		with self.assertRaisesRegex(HTTPException, "non contiene il nome del PDF"):
+			HireReadyApiClient("http://127.0.0.1:8010").download_report_pdf({})
 
 
 if __name__ == "__main__":

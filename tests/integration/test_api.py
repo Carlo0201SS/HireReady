@@ -225,8 +225,11 @@ class HireReadyApiTests(unittest.TestCase):
 
 		self.assertEqual(response.status_code, 422)
 
+	@patch("backend.api.save_report_pdf", return_value="report_colloquio_1.pdf")
 	@patch("backend.api.generate_report_pdf", return_value=b"%PDF-report")
-	def test_interview_report_pdf_endpoint_returns_downloadable_pdf(self, generate_pdf):
+	def test_interview_report_pdf_endpoint_returns_downloadable_pdf(
+		self, generate_pdf, save_pdf
+	):
 		report = {
 			"summary": "Il candidato ha esperienza con Python.",
 			"intervention_points": [],
@@ -240,8 +243,12 @@ class HireReadyApiTests(unittest.TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.content, b"%PDF-report")
 		self.assertEqual(response.headers["content-type"], "application/pdf")
-		self.assertIn("attachment; filename=", response.headers["content-disposition"])
+		self.assertEqual(
+			response.headers["content-disposition"],
+			'attachment; filename="report_colloquio_1.pdf"',
+		)
 		generate_pdf.assert_called_once()
+		save_pdf.assert_called_once_with(b"%PDF-report")
 
 	@patch(
 		"backend.api.generate_report_pdf",

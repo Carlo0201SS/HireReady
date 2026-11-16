@@ -4,11 +4,20 @@ from unittest.mock import Mock, patch
 from pydantic import ValidationError
 
 from backend.domain.models.cv_model import CVParsedProfile
-from backend.domain.models.interview_model import HireReadyTurn
-from backend.manager.llm.gemma_interview import (
-    DOMANDE_CV,
-    DOMANDE_TECNICHE,
+from backend.domain.models.interview_model import (
+    CAREER_FIRST_TURN_ID,
+    CAREER_LAST_TURN_ID,
+    CV_FIRST_TURN_ID,
+    CV_LAST_TURN_ID,
     FINAL_TURN_ID,
+    HireReadyTurn,
+    TECHNICAL_FIRST_TURN_ID,
+)
+from backend.manager.llm.gemma_interview import (
+    DOMANDE_CARRIERA,
+    DOMANDE_CV,
+    DOMANDE_TOTALI,
+    DOMANDE_TECNICHE,
     GemmaInterview,
     InterviewState,
     SYSTEM_PROMPT_TEMPLATE,
@@ -27,29 +36,38 @@ class InterviewModerationPolicyTests(unittest.TestCase):
             level_position="middle",
             position_description="Esperienza con API REST.",
             candidate_profile="{}",
+            cv_first_turn_id=CV_FIRST_TURN_ID,
+            cv_last_turn_id=CV_LAST_TURN_ID,
+            career_first_turn_id=CAREER_FIRST_TURN_ID,
+            career_last_turn_id=CAREER_LAST_TURN_ID,
+            technical_first_turn_id=TECHNICAL_FIRST_TURN_ID,
             num_domande_cv=DOMANDE_CV,
+            num_domande_carriera=DOMANDE_CARRIERA,
             num_domande_tecniche=DOMANDE_TECNICHE,
+            num_domande_totali=DOMANDE_TOTALI,
             last_question_turn_id=ULTIMO_TURNO_DOMANDA,
             final_turn_id=FINAL_TURN_ID,
         )
         self.assertIn("Esperienza con API REST.", prompt)
         self.assertIn("LIVELLO DI ESPERIENZA", prompt)
-        self.assertIn("per junior verifica i fondamenti", prompt)
+        self.assertIn('per "junior" verifica i fondamenti', prompt)
         self.assertIn("per senior privilegia progettazione", prompt)
 
         self.assertIn('is_meaningful.azione="blocca" se lingua non è "Italiano"', prompt)
         self.assertIn("volgarità o rivolge insulti offensivi", prompt)
         self.assertIn("risposte errate, vaghe, incomplete, non pertinenti", prompt)
-        self.assertIn('turn_id 0, 1 e 2: phase="cv"', prompt)
+        self.assertIn('turn_id da 0 a 4: phase="cv"', prompt)
+        self.assertIn('turn_id da 5 a 10: phase="carriera"', prompt)
         self.assertIn("La prima chiamata avviene con turn_id=0", prompt)
-        self.assertIn("la prima domanda è il turno 0", prompt)
+        self.assertIn("questa è la prima domanda", prompt)
         self.assertIn("non dire \"passiamo alla seconda domanda\"", prompt)
-        self.assertIn('turn_id 3: phase="presentazione"', prompt)
-        self.assertIn('turn_id da 4 a 10: phase="tecnica"', prompt)
-        self.assertIn('turn_id 11: phase="finale" e is_final=true', prompt)
-        self.assertIn("esattamente 7 domande", prompt)
+        self.assertIn('turn_id da 11 a 19: phase="tecnica"', prompt)
+        self.assertIn('turn_id 20: phase="finale" e is_final=true', prompt)
+        self.assertIn("5 sul CV", prompt)
+        self.assertIn("6 sul percorso", prompt)
+        self.assertIn("9 tecniche", prompt)
         self.assertIn(
-            "prosegui con tutte le domande previste fino al turno 10",
+            "prosegui con tutte le domande previste fino al turno 19",
             prompt,
         )
         self.assertIn(
@@ -149,6 +167,49 @@ class InterviewModerationPolicyTests(unittest.TestCase):
             0,
         )
 
+    def test_request_uses_recent_window_and_keeps_complete_history(self):
+        interview = GemmaInterview()
+        interview._request_turn = Mock(
+            return_value=(
+                '{"turn_id":0,"phase":"cv","is_final":false,'
+                '"is_meaningful":null,'
+                '"evaluation_of_previous_answer":null,'
+                '"next_question":{"id":1,"text":"Domanda successiva."}}'
+            )
+        )
+        history = [
+            {"role": "system", "content": "Prompt di sistema."},
+            {"role": "assistant", "content": "Domanda 1."},
+            {"role": "user", "content": "Risposta 1."},
+            {"role": "assistant", "content": "Domanda 2."},
+            {"role": "user", "content": "Risposta 2."},
+            {"role": "assistant", "content": "Domanda 3."},
+        ]
+        state = InterviewState(turn_id=0, history=history.copy())
+
+        with patch(
+            "backend.manager.llm.gemma_interview.INTERVIEW_HISTORY_WINDOW",
+            2,
+        ):
+            interview._call_llm(state, "Risposta corrente.")
+
+        prompt_messages = interview._request_turn.call_args.args[0]
+        self.assertEqual(
+            prompt_messages,
+            [
+                {"role": "system", "content": "Prompt di sistema."},
+                {"role": "assistant", "content": "Domanda 2."},
+                {"role": "user", "content": "Risposta 2."},
+                {"role": "assistant", "content": "Domanda 3."},
+                {"role": "user", "content": "Risposta corrente."},
+            ],
+        )
+        self.assertEqual(len(state.history), len(history) + 2)
+        self.assertEqual(
+            state.history[:-1],
+            history + [{"role": "user", "content": "Risposta corrente."}],
+        )
+
     def test_json_schema_documents_moderation_and_finalization_rules(self):
         schema = HireReadyTurn.model_json_schema()
         properties = schema["$defs"]["IsMeaningful"]["properties"]
@@ -160,7 +221,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
 
     def test_turn_schema_is_specialized_to_the_expected_id_and_phase(self):
         cv_schema = _response_schema_for_turn(2)
-        final_schema = _response_schema_for_turn(11)
+        final_schema = _response_schema_for_turn(FINAL_TURN_ID)
 
         self.assertEqual(cv_schema["properties"]["turn_id"]["const"], 2)
         self.assertEqual(cv_schema["properties"]["phase"]["const"], "cv")
@@ -292,13 +353,13 @@ class InterviewModerationPolicyTests(unittest.TestCase):
     def test_turn_payload_validation_applies_safe_classification_fallback(self):
         turn = _validate_turn_payload(
             (
-                '{"turn_id":3,"phase":"presentazione","is_final":false,'
+                '{"turn_id":5,"phase":"carriera","is_final":false,'
                 '"is_meaningful":null,'
                 '"evaluation_of_previous_answer":{"score":8},'
-                '"next_question":{"id":4,'
+                '"next_question":{"id":6,'
                 '"text":"Raccontami il tuo percorso professionale."}}'
             ),
-            3,
+            5,
         )
 
         self.assertIsNotNone(turn.is_meaningful)
@@ -307,14 +368,20 @@ class InterviewModerationPolicyTests(unittest.TestCase):
 
     def test_turn_id_phase_schedule_and_early_moderation_close(self):
         schedule = {
-            **{turn_id: "cv" for turn_id in range(0, 3)},
-            3: "presentazione",
-            **{turn_id: "tecnica" for turn_id in range(4, 11)},
-            11: "finale",
+            **{turn_id: "cv" for turn_id in range(CV_FIRST_TURN_ID, CV_LAST_TURN_ID + 1)},
+            **{
+                turn_id: "carriera"
+                for turn_id in range(CAREER_FIRST_TURN_ID, CAREER_LAST_TURN_ID + 1)
+            },
+            **{
+                turn_id: "tecnica"
+                for turn_id in range(TECHNICAL_FIRST_TURN_ID, FINAL_TURN_ID)
+            },
+            FINAL_TURN_ID: "finale",
         }
 
         for turn_id, phase in schedule.items():
-            is_final = turn_id == 11
+            is_final = turn_id == FINAL_TURN_ID
             turn = HireReadyTurn.model_validate(
                 {
                     "turn_id": turn_id,
@@ -326,7 +393,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                         "motivazione": "Il linguaggio è appropriato.",
                     },
                     "evaluation_of_previous_answer": (
-                        None if turn_id in (0, 11) else {"score": 7}
+                        None if turn_id in (0, FINAL_TURN_ID) else {"score": 7}
                     ),
                     "next_question": (
                         None
@@ -361,7 +428,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
     def test_normal_final_turn_marks_interview_closed(self):
         final_turn = HireReadyTurn.model_validate(
             {
-                "turn_id": 11,
+                "turn_id": FINAL_TURN_ID,
                 "phase": "finale",
                 "is_final": True,
                 "is_meaningful": {
@@ -375,7 +442,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         )
         previous_turn = HireReadyTurn.model_validate(
             {
-                "turn_id": 10,
+                "turn_id": 19,
                 "phase": "tecnica",
                 "is_final": False,
                 "is_meaningful": {
@@ -385,12 +452,12 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 },
                 "evaluation_of_previous_answer": {"score": 8},
                 "next_question": {
-                    "id": 11,
+                    "id": 20,
                     "text": "Descrivi un problema tecnico complesso.",
                 },
             }
         )
-        state = InterviewState(turn_id=10, last_turn=previous_turn)
+        state = InterviewState(turn_id=19, last_turn=previous_turn)
         interview = GemmaInterview()
 
         with patch.object(interview, "_call_llm", return_value=final_turn):
@@ -405,7 +472,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
     def test_moderation_close_marks_interview_closed(self):
         blocked_turn = HireReadyTurn.model_validate(
             {
-                "turn_id": 4,
+                "turn_id": 11,
                 "phase": "tecnica",
                 "is_final": False,
                 "is_meaningful": {
@@ -415,15 +482,15 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 },
                 "evaluation_of_previous_answer": {"score": 1},
                 "next_question": {
-                    "id": 5,
+                    "id": 12,
                     "text": "Descrivi un progetto tecnico.",
                 },
             }
         )
         previous_turn = HireReadyTurn.model_validate(
             {
-                "turn_id": 3,
-                "phase": "presentazione",
+                "turn_id": 10,
+                "phase": "carriera",
                 "is_final": False,
                 "is_meaningful": {
                     "azione": "prosegui",
@@ -432,12 +499,12 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 },
                 "evaluation_of_previous_answer": {"score": 8},
                 "next_question": {
-                    "id": 4,
+                    "id": 11,
                     "text": "Come si relazionano le tue competenze al ruolo?",
                 },
             }
         )
-        state = InterviewState(turn_id=3, last_turn=previous_turn)
+        state = InterviewState(turn_id=10, last_turn=previous_turn)
         interview = GemmaInterview()
 
         with patch.object(interview, "_call_llm", return_value=blocked_turn):
@@ -452,7 +519,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
     def test_non_italian_answer_forces_interview_close(self):
         turn = HireReadyTurn.model_validate(
             {
-                "turn_id": 4,
+                "turn_id": 11,
                 "phase": "tecnica",
                 "is_final": False,
                 "is_meaningful": {
@@ -462,7 +529,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
                 },
                 "evaluation_of_previous_answer": {"score": 7},
                 "next_question": {
-                    "id": 5,
+                    "id": 12,
                     "text": "Descrivi un progetto tecnico.",
                 },
             }
@@ -480,7 +547,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
     def test_rebuilt_state_is_closed_for_final_or_blocked_turn(self):
         final_turn = HireReadyTurn.model_validate(
             {
-                "turn_id": 11,
+                "turn_id": FINAL_TURN_ID,
                 "phase": "finale",
                 "is_final": True,
                 "is_meaningful": {
@@ -518,7 +585,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
 
     def test_rejects_phase_mismatch_and_unexpected_turn_id(self):
         turn = {
-            "turn_id": 3,
+            "turn_id": 5,
             "phase": "cv",
             "is_final": False,
             "is_meaningful": {
@@ -536,7 +603,7 @@ class InterviewModerationPolicyTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             HireReadyTurn.model_validate(turn)
 
-        turn["phase"] = "presentazione"
+        turn["phase"] = "carriera"
         with self.assertRaises(ValidationError):
             HireReadyTurn.model_validate(
                 turn,

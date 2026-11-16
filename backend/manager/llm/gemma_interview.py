@@ -10,9 +10,14 @@ from pydantic import ValidationError
 
 from backend.domain.models.cv_model import CVParsedProfile
 from backend.domain.models.interview_model import (
+    CAREER_FIRST_TURN_ID,
+    CAREER_LAST_TURN_ID,
+    CV_FIRST_TURN_ID,
+    CV_LAST_TURN_ID,
     FINAL_TURN_ID,
     HireReadyTurn,
     ProfileConsistencyCheck,
+    TECHNICAL_FIRST_TURN_ID,
 )
     
 
@@ -22,9 +27,21 @@ from interops.lm_studio_client import LMStudioAPI, LMStudioUnavailableError
 # ---------------------------------------------------------------------------
 # Prompt del colloquio
 # ---------------------------------------------------------------------------
-DOMANDE_CV = 3
-DOMANDE_TECNICHE = FINAL_TURN_ID - 4
+DOMANDE_CV = CV_LAST_TURN_ID - CV_FIRST_TURN_ID + 1
+DOMANDE_CARRIERA = CAREER_LAST_TURN_ID - CAREER_FIRST_TURN_ID + 1
+DOMANDE_TECNICHE = FINAL_TURN_ID - TECHNICAL_FIRST_TURN_ID
+DOMANDE_TOTALI = FINAL_TURN_ID
 ULTIMO_TURNO_DOMANDA = FINAL_TURN_ID - 1
+try:
+    INTERVIEW_HISTORY_WINDOW = int(
+        os.getenv("HIREREADY_INTERVIEW_HISTORY_WINDOW", "6")
+    )
+except ValueError as error:
+    raise RuntimeError(
+        "HIREREADY_INTERVIEW_HISTORY_WINDOW deve essere un numero intero."
+    ) from error
+if INTERVIEW_HISTORY_WINDOW < 1:
+    raise RuntimeError("HIREREADY_INTERVIEW_HISTORY_WINDOW deve essere almeno 1.")
 SYSTEM_PROMPT_TEMPLATE = """# RUOLO
 Sei un intervistatore tecnico esperto e membro del team Risorse Umane. Conosci a fondo il mondo IT e ICT, in particolare le posizioni di sviluppo web con qualsiasi tecnologia presente sul mercato. Sei esperto anche di AI e delle posizioni di ML Engineer e AI Developer.
 
@@ -57,14 +74,14 @@ Significato dei campi del profilo:
 # STRUTTURA DEL COLLOQUIO
 Il turno corrente è indicato da turn_id. turn_id identifica la risposta JSON che stai generando, non il numero di risposte già date dal candidato.
 La prima chiamata avviene con turn_id=0: in quella risposta poni la prima domanda CV. Dopo ogni risposta del candidato, il backend incrementa turn_id di uno e ti chiede il turno successivo. Non anticipare né saltare turni.
-Il messaggio tecnico usato dal backend per avviare il colloquio non è una risposta del candidato e non è una domanda già posta. Al turn_id=0 questa è la prima domanda: non ringraziare per una risposta precedente e non dire "passiamo alla seconda domanda". Devono essere presenti solo domande dal turn_id = 0 al turno finale previsto; dopo l'ultima domanda mostra il report.
+Il messaggio tecnico usato dal backend per avviare il colloquio non è una risposta del candidato e non è una domanda già posta. Al turn_id=0 questa è la prima domanda: non ringraziare per una risposta precedente e non dire "passiamo alla seconda domanda". Devono essere presenti solo domande dal turno 0 al turno {last_question_turn_id}; il turno {final_turn_id} è esclusivamente di chiusura.
 Rispetta rigorosamente questa tabella:
-- turn_id 0, 1 e 2: phase="cv". Fai esattamente {num_domande_cv} domande complessive, una per turno, sulle esperienze, competenze e aree di approfondimento del CV.
-- turn_id 3: phase="presentazione". Chiedi al candidato una breve presentazione personale e del proprio percorso.
-- turn_id da 4 a {last_question_turn_id}: phase="tecnica". Fai esattamente {num_domande_tecniche} domande tecniche, una per turno, sulle competenze richieste dalla posizione. Personalizza queste domande usando la sezione "DETTAGLI AGGIUNTIVI DELLA POSIZIONE": privilegia responsabilità, tecnologie e requisiti esplicitamente indicati, e verifica le competenze pertinenti senza presumere che il candidato le possieda. Parti dai concetti di base e aumenta gradualmente la difficoltà; collega le domande alle competenze ed esperienze dichiarate nel CV quando pertinente. Se non sono forniti dettagli aggiuntivi, basa le domande sulla posizione selezionata e sul profilo.
+- turn_id da {cv_first_turn_id} a {cv_last_turn_id}: phase="cv". Fai esattamente {num_domande_cv} domande complessive, una per turno, sulle esperienze, competenze e aree di approfondimento del CV.
+- turn_id da {career_first_turn_id} a {career_last_turn_id}: phase="carriera". Fai esattamente {num_domande_carriera} domande sul percorso professionale, sulle responsabilità e sui risultati del candidato, esplorando come esperienze e competenze si integrano con la posizione scelta e con i dettagli aggiuntivi del ruolo.
+- turn_id da {technical_first_turn_id} a {last_question_turn_id}: phase="tecnica". Fai esattamente {num_domande_tecniche} domande tecniche, una per turno, sulle competenze richieste dalla posizione. Personalizza queste domande usando la sezione "DETTAGLI AGGIUNTIVI DELLA POSIZIONE": privilegia responsabilità, tecnologie e requisiti esplicitamente indicati, e verifica le competenze pertinenti senza presumere che il candidato le possieda. Parti dai concetti di base e aumenta gradualmente la difficoltà; collega le domande alle competenze ed esperienze dichiarate nel CV quando pertinente. Se non sono forniti dettagli aggiuntivi, basa le domande sulla posizione selezionata e sul profilo.
 - turn_id {final_turn_id}: phase="finale" e is_final=true. Concludi il colloquio in maniera perentoria.
-Quindi la prima domanda è il turno 0 e le tre domande CV sono quelle dei turni 0, 1 e 2. Il turno 3 è la presentazione; i turni da 4 a {last_question_turn_id} sono le {num_domande_tecniche} domande tecniche; il turno {final_turn_id} è solo la chiusura.
-Calibra la difficoltà delle domande in base al "LIVELLO DI ESPERIENZA" selezionato: per junior verifica i fondamenti e chiedi esempi guidati; per middle approfondisci autonomia, applicazione pratica e risoluzione di problemi; per senior privilegia progettazione, trade-off, scalabilità, affidabilità e decisioni architetturali. Mantieni invariato il numero e la sequenza dei turni e non confondere il livello selezionato con competenze che il candidato non ha dichiarato.
+Le {num_domande_totali} domande del colloquio sono i turni da 0 a {last_question_turn_id}: {num_domande_cv} sul CV, {num_domande_carriera} sul percorso e sull'integrazione con il ruolo, e {num_domande_tecniche} tecniche. Il turno {final_turn_id} è solo la chiusura.
+Calibra la difficoltà delle domande in base al tipo di contratto: in questo caso è un {level_position}: per "junior" verifica i fondamenti e chiedi esempi guidati; per "middle approfondisci autonomia, applicazione pratica e risoluzione di problemi; per senior privilegia progettazione, trade-off, scalabilità, affidabilità e decisioni architetturali. Mantieni invariato il numero e la sequenza dei turni e non confondere il livello selezionato con competenze che il candidato non ha dichiarato.
 Per tutti i turni da 0 a {last_question_turn_id}, imposta is_final=false e poni la domanda prevista per il turno successivo, indipendentemente da quanto le risposte siano buone, deboli, errate, vaghe, incomplete o non pertinenti. Non saltare turni, non ripetere turni e non aggiungere domande di approfondimento: considera le lacune nella valutazione, ma non usarle mai come motivo per anticipare la conclusione. Al turno {final_turn_id} imposta is_final=true e concludi il colloquio. La chiusura anticipata per linguaggio inappropriato è gestita dal backend; non attivarla in base alla qualità delle risposte.
 
 # VALUTAZIONE DELLA RISPOSTA
@@ -78,7 +95,7 @@ Usa questa rubrica come guida, assegnando un punteggio complessivo proporzionato
 | Dettagli ed esempi | 0-2 | 2: include dettagli concreti o un esempio utile; 1: offre almeno un elemento specifico ma limitato; 0: resta generica quando la domanda richiede dettagli o un esempio. |
 | Chiarezza | 0-1 | 1: comprensibile; 0: difficile da seguire. |
 
-Calibra il totale secondo queste fasce: 9-10 risposta molto solida, pertinente e corretta; 7-8 buona risposta che soddisfa la richiesta centrale con omissioni minori; 5-6 risposta parziale ma con contenuti validi e pertinenti; 3-4 risposta debole, con lacune sostanziali o errori importanti; 1-2 risposta quasi del tutto fuori tema o errata. Una risposta breve ma diretta e corretta può ottenere un buon punteggio: non penalizzare la brevità in sé e non richiedere dettagli non richiesti. Valuta la profondità tecnica in modo proporzionato al livello di esperienza selezionato e alla difficoltà della domanda.
+Calibra il totale secondo queste fasce: 9-10 risposta molto solida, pertinente e corretta; 7-8 buona risposta che soddisfa la richiesta centrale con omissioni minori; 5-6 risposta parziale ma con contenuti validi e pertinenti; 3-4 risposta debole, con lacune sostanziali o errori importanti; 1-2 risposta quasi del tutto fuori tema o errata. Una risposta breve ma diretta e corretta può ottenere un buon punteggio: non penalizzare la brevità in sé e non richiedere dettagli non richiesti. Valuta la profondità tecnica : valuta che è un {level_position}.
 
 Controlla la coerenza sostanziale, non la semplice presenza di parole chiave. Una menzione isolata di una tecnologia non dimostra che la risposta abbia affrontato la domanda. Se manca o è solo marginale il requisito centrale, il voto non può superare 5/10: ad esempio, per una domanda su un progetto Django, parlare soprattutto di LLM senza spiegare il ruolo di Django non soddisfa il nucleo della richiesta. Non applicare questo limite quando il candidato risponde al punto centrale ma tralascia dettagli secondari. Al turno {final_turn_id}, che è solo la chiusura, imposta evaluation_of_previous_answer=null.
 Nei turni da 1 a {last_question_turn_id} usa is_meaningful.motivazione esclusivamente per dare un consiglio di miglioramento breve, concreto e specifico, preferibilmente in una sola frase. Non riassumere la risposta, non spiegare il voto. Anche per una risposta di alta qualità indica un piccolo passo pratico per renderla ancora più efficace, senza inventare lacune.
@@ -100,7 +117,7 @@ Considera il contesto: non bloccare per termini tecnici, citazioni o riferimenti
 Per la conclusione normale, is_final=true esclusivamente al turno {final_turn_id}. Non impostare is_final=true a causa della qualità o pertinenza di una risposta.
 
 # INIZIO
-Al turno 0, presentati brevemente come intervistatore e poni una domanda relativa al CV. Non chiedere ancora al candidato di presentarsi: la sua presentazione è prevista al turno 3. NON DUPLICARE DOMANDE: mostra sempre domande diverse a ogni turno."""
+Al turno 0, presentati brevemente come intervistatore e poni una domanda relativa al CV. Non chiedere ancora al candidato una presentazione generale: esplora il suo percorso professionale e il collegamento con la posizione scelta ai turni da {career_first_turn_id} a {career_last_turn_id}. NON DUPLICARE DOMANDE: mostra sempre domande diverse a ogni turno."""
 
 
 FINAL_MESSAGE = (
@@ -280,8 +297,15 @@ class GemmaInterview:
             level_position=level_position,
             position_description=position_description or "Nessun dettaglio aggiuntivo fornito.",
             candidate_profile=profile_json,
+            cv_first_turn_id=CV_FIRST_TURN_ID,
+            cv_last_turn_id=CV_LAST_TURN_ID,
+            career_first_turn_id=CAREER_FIRST_TURN_ID,
+            career_last_turn_id=CAREER_LAST_TURN_ID,
+            technical_first_turn_id=TECHNICAL_FIRST_TURN_ID,
             num_domande_cv=DOMANDE_CV,
+            num_domande_carriera=DOMANDE_CARRIERA,
             num_domande_tecniche=DOMANDE_TECNICHE,
+            num_domande_totali=DOMANDE_TOTALI,
             last_question_turn_id=ULTIMO_TURNO_DOMANDA,
             final_turn_id=FINAL_TURN_ID,
         )
@@ -414,7 +438,10 @@ class GemmaInterview:
                     "stesso soggetto. Usa 'contradiction' esclusivamente quando "
                     "le due affermazioni sono chiaramente incompatibili e non "
                     "possono essere entrambe vere, tenendo conto di date, "
-                    "contesto e qualificazioni. Esempi: negare esplicitamente "
+                    "contesto e qualificazioni, inoltre usa 'contradiction' quando il candidato"
+                    "scrive o argomenta senza nesso logico o con elementi"
+                    "poco inerenti con il contesto della discussione posto"
+                    "dalla domanda. Ecco alcuni esempi: negare esplicitamente "
                     "un'esperienza o una competenza dichiarata; indicare un "
                     "datore diverso per lo stesso periodo e ruolo esclusivo; "
                     "dichiarare un nome diverso. Non inferire negazioni dalla "
@@ -531,7 +558,7 @@ class GemmaInterview:
 
         # Un solo retry per correggere eventuali violazioni dello schema o dei
         # vincoli di coerenza del turno.
-        messages = list(history)
+        messages = self._windowed_history(history)
         for attempt in range(2):
             content = self._request_turn(messages, response_format)
             try:
@@ -588,6 +615,17 @@ class GemmaInterview:
             )
         state.history = history
         return turn
+
+    @staticmethod
+    def _windowed_history(history: list[dict[str, str]]) -> list[dict[str, str]]:
+        system_prompt = (
+            history[:1]
+            if history and history[0].get("role") == "system"
+            else []
+        )
+        conversation = history[len(system_prompt) :]
+        recent_messages = conversation[-(2 * INTERVIEW_HISTORY_WINDOW) :]
+        return system_prompt + recent_messages
 
     def _request_turn(self, messages, response_format) -> str:
         """Chiama LM Studio e restituisce il content testuale della risposta."""

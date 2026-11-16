@@ -3,7 +3,7 @@ import unittest
 from pydantic import ValidationError
 
 from backend.domain.models.api_model import InterviewRequest
-from backend.domain.models.interview_model import HireReadyTurn
+from backend.domain.models.interview_model import FINAL_TURN_ID, HireReadyTurn
 
 
 START_TURN = {
@@ -20,7 +20,7 @@ START_TURN = {
 
 
 FINAL_TURN = {
-	"turn_id": 11,
+	"turn_id": FINAL_TURN_ID,
 	"phase": "finale",
 	"is_final": True,
 	"is_meaningful": {
@@ -87,11 +87,11 @@ class InterviewSchemaTests(unittest.TestCase):
 	def test_requires_score_for_every_turn_after_start(self):
 		turn = {
 			**FINAL_TURN,
-			"turn_id": 3,
-			"phase": "presentazione",
+			"turn_id": 5,
+			"phase": "carriera",
 			"is_final": False,
 			"next_question": {
-				"id": 4,
+				"id": 6,
 				"text": "Raccontami il tuo percorso professionale.",
 			},
 			"evaluation_of_previous_answer": None,

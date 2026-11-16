@@ -14,6 +14,7 @@ from backend.controller import (
 	interview_handle,
 	is_anonymization_available,
 	parse_cv_for_interview,
+	save_report_pdf,
 	warm_up_anonymization,
 )
 from backend.domain.models.api_model import (
@@ -180,6 +181,7 @@ def interview_report(request: InterviewReportRequest) -> InterviewReportResponse
 def interview_report_pdf(request: InterviewReportResponse) -> Response:
 	try:
 		pdf = generate_report_pdf(request)
+		filename = save_report_pdf(pdf)
 	except ReportPdfRendererUnavailable as error:
 		logger.exception("Renderer PDF non disponibile.")
 		raise HTTPException(status_code=503, detail=str(error)) from error
@@ -192,5 +194,5 @@ def interview_report_pdf(request: InterviewReportResponse) -> Response:
 	return Response(
 		content=pdf,
 		media_type="application/pdf",
-		headers={"Content-Disposition": 'attachment; filename="report_colloquio.pdf"'},
+		headers={"Content-Disposition": f'attachment; filename="{filename}"'},
 	)

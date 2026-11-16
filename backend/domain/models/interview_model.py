@@ -7,12 +7,18 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validat
 
 
 try:
-    FINAL_TURN_ID = int(os.getenv("HIREREADY_FINAL_TURN_ID", "11"))
+    FINAL_TURN_ID = int(os.getenv("HIREREADY_FINAL_TURN_ID", "20"))
 except ValueError as error:
     raise RuntimeError("HIREREADY_FINAL_TURN_ID deve essere un numero intero.") from error
 
-if FINAL_TURN_ID < 5:
-    raise RuntimeError("HIREREADY_FINAL_TURN_ID deve essere almeno 5.")
+if FINAL_TURN_ID < 12:
+    raise RuntimeError("HIREREADY_FINAL_TURN_ID deve essere almeno 12.")
+
+CV_FIRST_TURN_ID = 0
+CV_LAST_TURN_ID = 4
+CAREER_FIRST_TURN_ID = 5
+CAREER_LAST_TURN_ID = 10
+TECHNICAL_FIRST_TURN_ID = 11
 
 
 class StrictModel(BaseModel):
@@ -127,14 +133,14 @@ class HireReadyTurn(StrictModel):
     @staticmethod
     def expected_phase(
         turn_id: int,
-    ) -> Literal["presentazione", "cv", "tecnica", "finale"]:
-        if 0 <= turn_id <= 2:
+    ) -> Literal["carriera", "cv", "tecnica", "finale"]:
+        if CV_FIRST_TURN_ID <= turn_id <= CV_LAST_TURN_ID:
             return "cv"
-        if turn_id == 3:
-            return "presentazione"
+        if CAREER_FIRST_TURN_ID <= turn_id <= CAREER_LAST_TURN_ID:
+            return "carriera"
         if turn_id == FINAL_TURN_ID:
             return "finale"
-        if 4 <= turn_id < FINAL_TURN_ID:
+        if TECHNICAL_FIRST_TURN_ID <= turn_id < FINAL_TURN_ID:
             return "tecnica"
         raise ValueError(
             f"turn_id deve essere compreso tra 0 e {FINAL_TURN_ID}."
@@ -145,11 +151,13 @@ class HireReadyTurn(StrictModel):
         ge=0,
         le=FINAL_TURN_ID,
         description=(
-            f"Numero del turno corrente: 0-2=cv, 3=presentazione, "
-            f"4-{FINAL_TURN_ID - 1}=tecnica, {FINAL_TURN_ID}=finale."
+            f"Numero del turno corrente: {CV_FIRST_TURN_ID}-{CV_LAST_TURN_ID}=cv, "
+            f"{CAREER_FIRST_TURN_ID}-{CAREER_LAST_TURN_ID}=carriera, "
+            f"{TECHNICAL_FIRST_TURN_ID}-{FINAL_TURN_ID - 1}=tecnica, "
+            f"{FINAL_TURN_ID}=finale."
         ),
     )
-    phase: Literal["presentazione", "cv", "tecnica", "finale"]
+    phase: Literal["carriera", "cv", "tecnica", "finale"]
     is_final: bool = Field(
         description=(
             "True solo quando il colloquio è terminato secondo le sue fasi; "

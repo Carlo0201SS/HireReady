@@ -63,7 +63,11 @@ report = st.session_state.get("interview_report")
 if report is None:
 	contenuto = (current_turn.get("is_meaningful") or {}).get("motivazione", "")
 	report_history = history
-	if current_turn.get("turn_id") == 11:
+	if (
+		current_turn.get("is_final")
+		and current_turn.get("closure_reason") is None
+		and (current_turn.get("is_meaningful") or {}).get("azione") != "blocca"
+	):
 		report_history = history[:-2]
 	with st.spinner("Gemma sta preparando il riepilogo del colloquio..."):
 		try:
@@ -91,18 +95,20 @@ st.markdown(
 )
 
 report_pdf = st.session_state.get("interview_report_pdf")
-if report_pdf is None:
+report_pdf_filename = st.session_state.get("interview_report_pdf_filename")
+if report_pdf is None or report_pdf_filename is None:
 	try:
-		report_pdf = api_client.download_report_pdf(report)
+		report_pdf, report_pdf_filename = api_client.download_report_pdf(report)
 	except HTTPException as error:
 		st.error(f"PDF non disponibile: {error.detail}")
 	else:
 		st.session_state["interview_report_pdf"] = report_pdf
-if report_pdf is not None:
+		st.session_state["interview_report_pdf_filename"] = report_pdf_filename
+if report_pdf is not None and report_pdf_filename is not None:
 	st.download_button(
 		"Scarica il report in PDF",
 		data=report_pdf,
-		file_name="report_colloquio.pdf",
+		file_name=st.session_state["interview_report_pdf_filename"],
 		mime="application/pdf",
 		use_container_width=True,
 	)

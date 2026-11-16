@@ -108,7 +108,7 @@ class EmploymentConsistencyTests(unittest.TestCase):
 		questioned_turn = HireReadyTurn.model_validate(
 			{
 				"turn_id": 4,
-				"phase": "tecnica",
+				"phase": "cv",
 				"is_final": False,
 				"is_meaningful": {
 					"azione": "prosegui",
@@ -125,7 +125,7 @@ class EmploymentConsistencyTests(unittest.TestCase):
 		previous_turn = HireReadyTurn.model_validate(
 			{
 				"turn_id": 3,
-				"phase": "presentazione",
+				"phase": "cv",
 				"is_final": False,
 				"is_meaningful": {
 					"azione": "prosegui",

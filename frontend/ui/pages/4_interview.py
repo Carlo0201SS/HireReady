@@ -22,7 +22,7 @@ st.set_page_config(
 # ----------------------------------------------------------------------
 FASI = {
     "cv": (1, "Esperienze e CV"),
-    "presentazione": (2, "Presentazione"),
+    "carriera": (2, "Carriera e integrazione con il ruolo"),
     "tecnica": (3, "Domande tecniche"),
     "finale": (4, "Chiusura"),
 }
@@ -147,8 +147,9 @@ if "interview_turn" not in st.session_state:
         """
         <div class="briefing-box">
         <h4>Come funziona</h4>
-        Il colloquio si svolge in 4 fasi: <b>presentazione</b>, <b>esperienze e CV</b>,
-        <b>domande tecniche</b> e <b>chiusura</b>. Riceverai una domanda alla volta.
+        Il colloquio si svolge in 4 fasi: <b>esperienze e CV</b>,
+        <b>carriera e integrazione con il ruolo</b>, <b>domande tecniche</b>
+        e <b>chiusura</b>. Riceverai una domanda alla volta.
 
         <h4>Regole</h4>
         • Non c'è un timer: prenditi il tempo che ti serve per ogni risposta.<br>
