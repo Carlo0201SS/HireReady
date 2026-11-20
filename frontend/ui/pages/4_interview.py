@@ -164,29 +164,33 @@ if "interview_turn" not in st.session_state:
     )
     st.write("")
 
-    if st.button("Inizia il colloquio ➜", type="primary"):
-        with st.spinner("Preparazione della prima domanda…"):
-            try:
-                response = api_client.interview(
-                    anonymized_cv=context["anonymized_cv"],
-                    selected_position=context["selected_position"],
-                    level_position=level_position,
-                    position_description=context.get("position_description", ""),
-                    profile=context["profile"],
-                )
-            except HTTPException as error:
-                st.error(str(error.detail))
-                st.stop()
-        st.session_state["interview_turn"] = response["turn"]
-        st.session_state["interview_history"] = response["history"]
-        st.session_state["interview_closed"] = (
-            response["is_closed"]
-            or api_client.is_interview_closed(response["turn"])
-        )
-        st.session_state["interview_report_answers"] = []
-        st.session_state.pop("interview_report", None)
-        st.session_state["answer_counter"] = 0
-        st.rerun()
+    col_inizia, col_speech = st.columns([1, 3])
+    with col_inizia:
+        if st.button("Inizia il colloquio ➜", type="primary"):
+            with st.spinner("Preparazione della prima domanda…"):
+                try:
+                    response = api_client.interview(
+                        anonymized_cv=context["anonymized_cv"],
+                        selected_position=context["selected_position"],
+                        level_position=level_position,
+                        position_description=context.get("position_description", ""),
+                        profile=context["profile"],
+                    )
+                except HTTPException as error:
+                    st.error(str(error.detail))
+                    st.stop()
+            st.session_state["interview_turn"] = response["turn"]
+            st.session_state["interview_history"] = response["history"]
+            st.session_state["interview_closed"] = (
+                response["is_closed"]
+                or api_client.is_interview_closed(response["turn"])
+            )
+            st.session_state["interview_report_answers"] = []
+            st.session_state.pop("interview_report", None)
+            st.session_state["answer_counter"] = 0
+            st.rerun()
+    with col_speech:
+        st.button("speech to text", type="primary")
     st.stop()
 
 
