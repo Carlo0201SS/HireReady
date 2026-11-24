@@ -2,6 +2,7 @@ from collections.abc import MutableMapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import lru_cache
 import os
+import time
 from typing import Any, Callable, Mapping
 
 from backend.application.anonymization_service import AnonymizationService
@@ -24,10 +25,16 @@ from backend.manager.llm.gemma_interview import GemmaInterview, InterviewState
 from backend.manager.llm.gemma_report import GemmaInterviewReporter
 from backend.manager.report.reportlab_pdf_renderer import ReportLabPdfRenderer
 
+from backend.manager.speech.speech_to_text import STTManager
+
 
 _ANONYMIZATION_EXECUTOR = ThreadPoolExecutor(
 	max_workers=1,
 	thread_name_prefix="cv-anonymization",
+)
+_STT_EXECUTOR = ThreadPoolExecutor(
+	max_workers=1,
+	thread_name_prefix="stt-transcription",
 )
 _INTERVIEW_SESSION_KEYS = (
 	"interview_turn",
@@ -108,6 +115,32 @@ def submit_anonymization(
 		anonymize,
 		get_status,
 	)
+
+
+def submit_transcription(
+	audio_bytes: bytes,
+	transcribe: Callable[[bytes], str],
+	get_status: Callable[[], Mapping[str, Any]],
+) -> Future[str]:
+	if not audio_bytes:
+		raise ValueError("L'audio da trascrivere è vuoto.")
+	return _STT_EXECUTOR.submit(
+		_transcribe_when_ready,
+		audio_bytes,
+		transcribe,
+		get_status,
+	)
+
+
+def _transcribe_when_ready(
+	audio_bytes: bytes,
+	transcribe: Callable[[bytes], str],
+	get_status: Callable[[], Mapping[str, Any]],
+) -> str:
+	# Attende che il modello STT sia pronto (stesso pattern di RizzoAnonymizer)
+	while get_status().get("state") != "ready":
+		time.sleep(0.5)
+	return transcribe(audio_bytes)
 
 
 def reset_interview_session(session_state: MutableMapping[str, Any]) -> None:
@@ -230,3 +263,46 @@ def save_report_pdf(pdf: bytes) -> str:
 			return filename
 		except FileExistsError:
 			index += 1
+
+# ------ SERVIZIO SPEECH-TO-TEXT ---------------------------------------
+
+@lru_cache(maxsize=1)
+def _stt_manager() -> STTManager:
+	return STTManager(
+		model_size=os.getenv("HIREREADY_STT_MODEL_SIZE", "small"),
+		device=os.getenv("HIREREADY_STT_DEVICE", "cpu"),
+		compute_type=os.getenv("HIREREADY_STT_COMPUTE_TYPE", "int8"),
+	)
+
+
+def warm_up_stt() -> None:
+	_stt_manager().warm_up()
+
+
+def stt_state() -> str:
+	return _stt_manager().state
+
+
+def is_stt_available() -> bool:
+	return _stt_manager().is_ready
+
+
+def transcribe_audio(
+	audio_bytes: bytes,
+	language: str | None = None,
+	beam_size: int = 5,
+	vad_filter: bool = True,
+) -> dict:
+	return _stt_manager().transcribe(
+		audio_bytes,
+		language=language,
+		beam_size=beam_size,
+		vad_filter=vad_filter,
+	)
+
+
+def transcribe_audio_to_text(
+	audio_bytes: bytes,
+	language: str | None = None,
+) -> str:
+	return _stt_manager().transcribe_to_text(audio_bytes, language=language)

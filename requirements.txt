@@ -29,3 +29,5 @@ weasyprint
 Jinja2
 
 speechrecognition
+assemblyai
+faster-whisper

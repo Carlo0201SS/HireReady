@@ -164,33 +164,30 @@ if "interview_turn" not in st.session_state:
     )
     st.write("")
 
-    col_inizia, col_speech = st.columns([1, 3])
-    with col_inizia:
-        if st.button("Inizia il colloquio ➜", type="primary"):
-            with st.spinner("Preparazione della prima domanda…"):
-                try:
-                    response = api_client.interview(
-                        anonymized_cv=context["anonymized_cv"],
-                        selected_position=context["selected_position"],
-                        level_position=level_position,
-                        position_description=context.get("position_description", ""),
-                        profile=context["profile"],
-                    )
-                except HTTPException as error:
-                    st.error(str(error.detail))
-                    st.stop()
-            st.session_state["interview_turn"] = response["turn"]
-            st.session_state["interview_history"] = response["history"]
-            st.session_state["interview_closed"] = (
-                response["is_closed"]
-                or api_client.is_interview_closed(response["turn"])
-            )
-            st.session_state["interview_report_answers"] = []
-            st.session_state.pop("interview_report", None)
-            st.session_state["answer_counter"] = 0
-            st.rerun()
-    with col_speech:
-        st.button("speech to text", type="primary")
+    if st.button("Inizia il colloquio ➜", type="primary"):
+        with st.spinner("Preparazione della prima domanda…"):
+            try:
+                response = api_client.interview(
+                    anonymized_cv=context["anonymized_cv"],
+                    selected_position=context["selected_position"],
+                    level_position=level_position,
+                    position_description=context.get("position_description", ""),
+                    profile=context["profile"],
+                )
+            except HTTPException as error:
+                st.error(str(error.detail))
+                st.stop()
+        st.session_state["interview_turn"] = response["turn"]
+        st.session_state["interview_history"] = response["history"]
+        st.session_state["interview_closed"] = (
+            response["is_closed"]
+            or api_client.is_interview_closed(response["turn"])
+        )
+        st.session_state["interview_report_answers"] = []
+        st.session_state.pop("interview_report", None)
+        st.session_state["answer_counter"] = 0
+        st.session_state.pop("last_transcribed_hash", None)
+        st.rerun()
     st.stop()
 
 
@@ -266,13 +263,62 @@ if is_closed:
 
 st.markdown('<div class="label-rispondi">La tua risposta</div>', unsafe_allow_html=True)
 
+chiave_input = f"input_risposta_{st.session_state.get('answer_counter', 0)}"
+
+# --- Stato del servizio STT (con cache breve per non chiamare l'API a ogni rerun) ---
+@st.cache_data(ttl=5, show_spinner=False)
+def _stt_disponibile() -> bool:
+    try:
+        return api_client.stt_available()
+    except HTTPException:
+        return False
+
+@st.fragment(run_every=2)  # si aggiorna ogni 2 secondi
+def area_risposta_con_stt(chiave_input: str):
+    # Ricontrolla lo stato a ogni aggiornamento del fragment
+    try:
+        stt_pronto = api_client.stt_available()
+    except HTTPException:
+        stt_pronto = False
+
+    if not stt_pronto:
+        st.info("Il servizio di trascrizione vocale si sta avviando…")
+        # Mostra comunque un widget disabilitato per mantenere la UI coerente
+        st.audio_input("Registra la tua risposta", key=f"voice_wait_{chiave_input}", disabled=True)
+        return 
+stt_pronto = api_client.stt_available()
+# --- Registrazione vocale → trascrizione ---
+audio_registrato = st.audio_input(
+    "Registra la tua risposta",
+    key=f"voice_{st.session_state.get('answer_counter', 0)}",
+    disabled=not stt_pronto,
+)
+
+if audio_registrato is not None:
+    audio_bytes = audio_registrato.getvalue()
+    audio_hash = hash(audio_bytes)
+    if st.session_state.get("last_transcribed_hash") != audio_hash:
+        with st.spinner("Trascrizione in corso…"):
+            try:
+                testo_trascritto = api_client.transcribe_audio_to_text(
+                    audio_bytes,
+                    filename="risposta.wav",
+                    language="it",
+                )
+            except HTTPException as error:
+                st.error(str(error.detail))
+                st.stop()
+        st.session_state[chiave_input] = testo_trascritto
+        st.session_state["last_transcribed_hash"] = audio_hash
+        st.rerun()
+
+# --- Text area: mostra e permette di modificare la trascrizione ---
 risposta_utente = st.text_area(
     label="La tua risposta",
-    placeholder="Scrivi qui la tua risposta…",
+    placeholder="Scrivi qui la tua risposta, oppure registrala con il microfono sopra…",
     height=160,
     label_visibility="collapsed",
-    # Chiave diversa per ogni domanda: così la casella riparte vuota.
-    key=f"input_risposta_{st.session_state.get('answer_counter', 0)}",
+    key=chiave_input,
 )
 
 _, col_bottone = st.columns([5, 1])
@@ -323,4 +369,5 @@ if invia:
             response["is_closed"] or api_client.is_interview_closed(evaluated_turn)
         )
         st.session_state["answer_counter"] = st.session_state.get("answer_counter", 0) + 1
+        st.session_state.pop("last_transcribed_hash", None)
         st.rerun()
