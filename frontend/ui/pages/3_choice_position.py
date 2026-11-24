@@ -28,7 +28,7 @@ if not source_cv:
 #--------- SCELTA POSIZIONE -----------------------------------
 st.selectbox(
 	"Seleziona la posizione per cui vuoi candidarti",
-	options=["Sviluppatore web React", "AI Engineer", "Machine learning Engineer", "Sviluppatore Android Kotlin", "Agentic AI Engineer", "Data Scientist"],
+	options=["Sviluppatore web React", "Sviluppatore backend .NET", "AI Engineer", "Machine learning Engineer", "Sviluppatore Android Kotlin", "Agentic AI Engineer", "Data Scientist"],
 	key="position_selection",
 	disabled=st.session_state["position_processing"],
 )

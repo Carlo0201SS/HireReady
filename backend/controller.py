@@ -292,12 +292,14 @@ def transcribe_audio(
 	language: str | None = None,
 	beam_size: int = 5,
 	vad_filter: bool = True,
+	initial_prompt: str | None = None,
 ) -> dict:
 	return _stt_manager().transcribe(
 		audio_bytes,
 		language=language,
 		beam_size=beam_size,
 		vad_filter=vad_filter,
+		initial_prompt=initial_prompt,
 	)
 
 
