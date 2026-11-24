@@ -1,0 +1,49 @@
+[project]
+name = "hireready"
+version = "0.1.0"
+description = "CV analysis and interview preparation application"
+readme = "README.md"
+authors = [
+    { name = "CarloAbis0201SS", email = "carloabis0201@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    # LLM clients and application models
+    "openai>=1.0.0",
+    "pydantic",
+    "PyYAML",
+    "requests",
+    # CV document extraction
+    "PyMuPDF",
+    "python-docx",
+    # Local PII anonymization
+    "huggingface-hub",
+    "torch",
+    "torchvision",
+    "transformers",
+    # Web UI and API
+    "fastapi",
+    "python-multipart",
+    "streamlit",
+    "uvicorn",
+    # PDF report generation
+    "reportlab>=4.2",
+    # Speech-to-text locale
+    "faster-whisper>=1.2.1",
+    # TEMPORANEO: faster-whisper 1.2.1 chiama av.open(..., metadata_errors=...),
+    # parametro rimosso in PyAV >= 14. Togliere il vincolo quando faster-whisper
+    # sarà compatibile con le versioni nuove di av.
+    "av<14",
+]
+
+[project.optional-dependencies]
+test = [
+    "httpx",
+]
+
+[project.scripts]
+hireready = "hireready:main"
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
