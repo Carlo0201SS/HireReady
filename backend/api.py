@@ -233,15 +233,11 @@ async def stt_transcribe(
 		audio_bytes = await audio.read()
 		if not audio_bytes:
 			raise HTTPException(status_code=400, detail="Il file audio è vuoto.")
-<<<<<<< HEAD
-		result = transcribe_audio(audio_bytes=audio_bytes, language=language)
-=======
 		result = transcribe_audio(
 			audio_bytes,
 			language=language,
 			initial_prompt=prompt,
 		)
->>>>>>> 150cd18ec962634f207985a1c47e7ebdb17e3d13
 	except HTTPException:
 		raise
 	except Exception as error:

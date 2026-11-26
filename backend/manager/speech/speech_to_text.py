@@ -38,7 +38,9 @@ class STTManager:
         self.device = device
         self.compute_type = compute_type
         self.cpu_threads = cpu_threads
+        self.initial_prompt = initial_prompt
         self._model = None
+        self._error: Optional[str] = None
         self._ready = threading.Event()
 
     def warm_up(self) -> None:
@@ -115,16 +117,12 @@ class STTManager:
             "vad_filter": vad_filter,
         }
 
-         # Aggiungi initial_prompt solo se è impostato
-        if self.initial_prompt:
-            transcribe_kwargs["initial_prompt"] = self.initial_prompt
+        # Prompt della singola richiesta, altrimenti quello di default del manager
+        prompt = initial_prompt or self.initial_prompt
+        if prompt:
+            transcribe_kwargs["initial_prompt"] = prompt
 
-        segments, info = self._model.transcribe(
-            audio_file,
-            language=language,
-            beam_size=beam_size,
-            vad_filter=vad_filter,
-        )
+        segments, info = self._model.transcribe(audio_file, **transcribe_kwargs)
         # I segmenti sono un generatore: li materializziamo
         segment_list = []
         text_parts = []
