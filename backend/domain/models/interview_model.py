@@ -44,14 +44,7 @@ class IsMeaningful(StrictModel):
             "o insulti diretti; altrimenti usare 'prosegui'."
         )
     )
-    lingua: str = Field(
-        min_length=1,
-        description=(
-            "Lingua rilevata nella risposta dell'utente appena ricevuta. Usa "
-            "esattamente 'Italiano' se la risposta è in italiano; altrimenti "
-            "indica la lingua rilevata, per esempio 'Inglese' o 'Francese'."
-        ),
-    )
+
     motivazione: str = Field(
         description=(
             f"Nei turni da 1 a {FINAL_TURN_ID - 1} contiene esclusivamente un consiglio di "

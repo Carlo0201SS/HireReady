@@ -2,8 +2,9 @@ from contextlib import asynccontextmanager
 import logging
 import os
 import threading
+from typing import Optional
 
-from fastapi import FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 
 from backend.controller import (
 	anonymization_state,
@@ -13,9 +14,13 @@ from backend.controller import (
 	generate_report_pdf,
 	interview_handle,
 	is_anonymization_available,
+	is_stt_available,
 	parse_cv_for_interview,
 	save_report_pdf,
+	stt_state,
+	transcribe_audio,
 	warm_up_anonymization,
+	warm_up_stt,
 )
 from backend.domain.models.api_model import (
 	AnonymizationStatusResponse,
@@ -30,15 +35,14 @@ from backend.domain.models.report_model import (
 	InterviewReportRequest,
 	InterviewReportResponse,
 )
-
 from backend.domain.models.interview_model import (
 	HireReadyTurn,
 )
+from backend.domain.models.speech_model import (
+  # se vuoi un modello dedicato, vedi sotto
+	TranscribeResponse,
+)
 from backend.manager.report.reportlab_pdf_renderer import ReportPdfRendererUnavailable
-
-
-
-
 
 
 logger = logging.getLogger(__name__)
@@ -46,15 +50,25 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-	# All'avvio scarica (se manca) e carica il modello Rizzo PII in background:
-	# l'API risponde subito e /api/anonymization/status ne riporta lo stato.
-	if os.getenv("HIREREADY_PRELOAD_MODELS", "1") == "1":
-		threading.Thread(target=warm_up_anonymization, name="rizzo-warm-up", daemon=True).start()
-	yield
+    # Avvio warm-up modelli in background (come per Rizzo)
+    if os.getenv("HIREREADY_PRELOAD_MODELS", "1") == "1":
+        threading.Thread(
+            target=warm_up_anonymization,
+            name="rizzo-warm-up",
+            daemon=True,
+        ).start()
+        threading.Thread(
+            target=warm_up_stt,
+            name="stt-warm-up",
+            daemon=True,
+        ).start()
+    yield
+    # Cleanup allo shutdown: libera la memoria del modello STT
+    # (il riferimento vive nel controller, non qui)
+    # Se vuoi un cleanup esplicito, esponi una funzione close_stt() dal controller.
 
 
 app = FastAPI(title="HireReady API", version="1.0.0", lifespan=lifespan)
-
 
 
 # ---Endpoint-----------------------------------------------------------------
@@ -73,7 +87,9 @@ def root() -> dict[str, object]:
 			"cv_interview_parsing": "POST /api/cv/gemma_parse",
 			"interview_report": "POST /api/report",
 			"interview_report_pdf": "POST /api/report/pdf",
-			"interview": "POST /api/interview"
+			"interview": "POST /api/interview",
+			"stt_status": "GET /api/stt/status",
+			"stt_transcribe": "POST /api/stt/transcribe",
 		},
 	}
 
@@ -161,7 +177,6 @@ def interview(request: InterviewRequest) -> InterviewResponse:
 	except RuntimeError as error:
 		raise HTTPException(status_code=502, detail=str(error)) from error
 	except Exception as error:
-		# Evita il 500 "muto": il frontend riceve comunque un detail leggibile.
 		logger.exception("Errore inatteso in /api/interview")
 		raise HTTPException(
 			status_code=500, detail=f"Errore interno: {type(error).__name__}: {error}"
@@ -196,3 +211,46 @@ def interview_report_pdf(request: InterviewReportResponse) -> Response:
 		media_type="application/pdf",
 		headers={"Content-Disposition": f'attachment; filename="{filename}"'},
 	)
+
+
+@app.get("/api/stt/status")
+def stt_status_endpoint() -> dict[str, object]:
+	return {
+		"available": is_stt_available(),
+	}
+
+
+@app.post("/api/stt/transcribe", response_model=TranscribeResponse)
+async def stt_transcribe(
+	audio: UploadFile = File(...),
+	language: Optional[str] = Form(None),
+	prompt: Optional[str] = Form(None),
+) -> TranscribeResponse:
+	if not is_stt_available():
+		raise HTTPException(status_code=503, detail="Modello STT non ancora pronto")
+
+	try:
+		audio_bytes = await audio.read()
+		if not audio_bytes:
+			raise HTTPException(status_code=400, detail="Il file audio è vuoto.")
+<<<<<<< HEAD
+		result = transcribe_audio(audio_bytes=audio_bytes, language=language)
+=======
+		result = transcribe_audio(
+			audio_bytes,
+			language=language,
+			initial_prompt=prompt,
+		)
+>>>>>>> 150cd18ec962634f207985a1c47e7ebdb17e3d13
+	except HTTPException:
+		raise
+	except Exception as error:
+		logger.exception("Trascrizione audio non riuscita.")
+		raise HTTPException(
+			status_code=500,
+			detail=f"Trascrizione audio non riuscita: {type(error).__name__}: {error}",
+		) from error
+	finally:
+		await audio.close()
+
+	return TranscribeResponse(**result)

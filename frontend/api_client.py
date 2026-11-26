@@ -121,6 +121,67 @@ class HireReadyApiClient:
 		)
 
 	# ------------------------------------------------------------------
+	# Speech-to-Text
+	# ------------------------------------------------------------------
+	def stt_status(self) -> dict:
+		return self._request("GET", "/api/stt/status")
+
+	def stt_available(self) -> bool:
+		return self.stt_status()["available"]
+
+	def transcribe_audio(
+		self,
+		audio_bytes: bytes,
+		filename: str = "audio.wav",
+		language: str | None = None,
+		prompt: str | None = None,
+	) -> dict:
+		"""Chiama POST /api/stt/transcribe.
+
+		Args:
+			audio_bytes: Byte del file audio (WAV, MP3, ecc.).
+			filename: Nome file da inviare nel multipart (il backend lo usa per
+				dedurre il formato; default "audio.wav").
+			language: Codice lingua opzionale ('it', 'en', ...). None = auto-detect.
+
+		Returns:
+			Dict con 'text', 'language', 'language_probability', 'segments'.
+		"""
+		if not audio_bytes:
+			raise HTTPException(status_code=422, detail="L'audio da trascrivere è vuoto.")
+
+		# requests non gestisce direttamente Optional[str] nei Form:
+		# se language è None, non lo inviamo affatto.
+		data = {}
+		if language:
+			data["language"] = language
+		if prompt:
+			data["prompt"] = prompt
+
+		return self._request(
+			"POST",
+			"/api/stt/transcribe",
+			files={"audio": (filename, audio_bytes)},
+			data=data,
+		)
+
+	def transcribe_audio_to_text(
+		self,
+		audio_bytes: bytes,
+		filename: str = "audio.wav",
+		language: str | None = None,
+		prompt: str | None = None,
+	) -> str:
+		"""Versione semplificata: restituisce solo il testo trascritto."""
+		result = self.transcribe_audio(
+			audio_bytes,
+			filename=filename,
+			language=language,
+			prompt=prompt,
+		)
+		return result["text"]
+
+	# ------------------------------------------------------------------
 	# Colloquio
 	# ------------------------------------------------------------------
 	def interview(
@@ -236,11 +297,10 @@ class HireReadyApiClient:
 		if not turn:
 			return False
 		is_meaningful = turn.get("is_meaningful") or {}
-		language = str(is_meaningful.get("lingua", "")).strip().casefold()
+		
 		return bool(
 			turn.get("is_final")
 			or is_meaningful.get("azione") == "blocca"
-			or language != "italiano"
 		)
 
 	@staticmethod

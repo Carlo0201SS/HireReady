@@ -186,6 +186,7 @@ if "interview_turn" not in st.session_state:
         st.session_state["interview_report_answers"] = []
         st.session_state.pop("interview_report", None)
         st.session_state["answer_counter"] = 0
+        st.session_state.pop("last_transcribed_hash", None)
         st.rerun()
     st.stop()
 
@@ -262,16 +263,83 @@ if is_closed:
 
 st.markdown('<div class="label-rispondi">La tua risposta</div>', unsafe_allow_html=True)
 
-risposta_utente = st.text_area(
-    label="La tua risposta",
-    placeholder="Scrivi qui la tua risposta…",
-    height=160,
-    label_visibility="collapsed",
-    # Chiave diversa per ogni domanda: così la casella riparte vuota.
-    key=f"input_risposta_{st.session_state.get('answer_counter', 0)}",
+chiave_input = f"input_risposta_{st.session_state.get('answer_counter', 0)}"
+
+def _prompt_trascrizione() -> str:
+    """Contesto per Whisper: ruolo, competenze del CV e domanda corrente.
+    Aiuta a riconoscere i termini tecnici (React, TypeScript, API...)."""
+    profilo = context.get("profile") or {}
+    competenze = profilo.get("technical_skills") or [] if isinstance(profilo, dict) else []
+    domanda = ((current_turn or {}).get("next_question") or {}).get("text", "")
+    parti = [f"Colloquio di lavoro per {context.get('selected_position', '')}."]
+    if competenze:
+        parti.append("Termini tecnici: " + ", ".join(map(str, competenze[:25])) + ".")
+    if domanda:
+        parti.append(f"Domanda: {domanda}")
+    # Whisper usa al massimo ~224 token di prompt: teniamolo corto
+    return " ".join(parti)[:800]
+
+
+# --- Stato del servizio STT ---
+try:
+    stt_pronto = api_client.stt_available()
+except HTTPException:
+    stt_pronto = False
+
+if not stt_pronto:
+    st.caption("🎙️ La trascrizione vocale non è ancora pronta: puoi scrivere la risposta, oppure attendere qualche secondo e ricaricare.")
+
+# --- Registrazione vocale → trascrizione ---
+audio_registrato = st.audio_input(
+    "Registra la tua risposta",
+    key=f"voice_{st.session_state.get('answer_counter', 0)}_{st.session_state.get('voice_reset', 0)}",
+    disabled=not stt_pronto,
 )
 
-_, col_bottone = st.columns([5, 1])
+if audio_registrato is not None:
+    audio_bytes = audio_registrato.getvalue()
+    audio_hash = hash(audio_bytes)
+    if st.session_state.get("last_transcribed_hash") != audio_hash:
+        with st.spinner("Trascrizione in corso…"):
+            try:
+                testo_trascritto = api_client.transcribe_audio_to_text(
+                    audio_bytes,
+                    filename="risposta.wav",
+                    language="it",
+                    prompt=_prompt_trascrizione(),
+                )
+            except HTTPException as error:
+                st.error(str(error.detail))
+                st.stop()
+        st.session_state[chiave_input] = testo_trascritto
+        st.session_state["last_transcribed_hash"] = audio_hash
+        st.rerun()
+
+# --- Text area: mostra e permette di modificare la trascrizione ---
+risposta_utente = st.text_area(
+    label="La tua risposta",
+    placeholder="Scrivi qui la tua risposta, oppure registrala con il microfono sopra…",
+    height=160,
+    label_visibility="collapsed",
+    key=chiave_input,
+)
+
+def _cancella_risposta(chiave: str) -> None:
+    # Svuota il testo e azzera il registratore: cambiando la sua key,
+    # Streamlit crea un widget nuovo e la registrazione precedente sparisce.
+    st.session_state[chiave] = ""
+    st.session_state.pop("last_transcribed_hash", None)
+    st.session_state["voice_reset"] = st.session_state.get("voice_reset", 0) + 1
+
+
+_, col_cancella, col_bottone = st.columns([4, 1, 1])
+with col_cancella:
+    st.button(
+        "Cancella",
+        use_container_width=True,
+        on_click=_cancella_risposta,
+        args=(chiave_input,),
+    )
 with col_bottone:
     invia = st.button("Invia risposta ➜", use_container_width=True, type="primary")
 
@@ -319,4 +387,5 @@ if invia:
             response["is_closed"] or api_client.is_interview_closed(evaluated_turn)
         )
         st.session_state["answer_counter"] = st.session_state.get("answer_counter", 0) + 1
+        st.session_state.pop("last_transcribed_hash", None)
         st.rerun()

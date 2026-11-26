@@ -25,12 +25,14 @@ if not source_cv:
 	)
 	st.stop()
 
+#--------- SCELTA POSIZIONE -----------------------------------
 st.selectbox(
 	"Seleziona la posizione per cui vuoi candidarti",
-	options=["Sviluppatore web React", "ML Engineer", "AI Agent Enthusiast", "Sviluppatore Android Kotlin"],
+	options=["Sviluppatore web React", "Sviluppatore backend .NET", "AI Engineer", "Machine learning Engineer", "Sviluppatore Android Kotlin", "Agentic AI Engineer", "Data Scientist"],
 	key="position_selection",
 	disabled=st.session_state["position_processing"],
 )
+#-------------- DESCRIZIONE DELLA POSIZIONE---------------------
 st.text_area(
 	"Descrizione o dettagli della posizione (facoltativo)",
 	placeholder="Aggiungi responsabilità, requisiti o argomenti che vuoi approfondire nel colloquio.",
@@ -38,6 +40,8 @@ st.text_area(
 	key="position_description",
 	disabled=st.session_state["position_processing"],
 )
+
+#---PROCESSAMENTO INFORMAZIONI-----------------------------
 
 def _start_position_processing() -> None:
 	st.session_state["selected_position"] = st.session_state["position_selection"]
