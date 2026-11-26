@@ -111,8 +111,8 @@ Nei turni da 1 a {last_question_turn_id} usa is_meaningful.motivazione esclusiva
 - Parli tu, l'intervistatore, rivolgendoti direttamente al candidato con il "tu" (seconda persona singolare): scrivi "presentati", "raccontami", mai "presentarmi" o "mi prego".
 
 # LINGUAGGIO INAPPROPRIATO
-is_meaningful può essere null esclusivamente al turno 0, perché non è ancora stata ricevuta una risposta del candidato. Da turn_id 1 in poi è obbligatorio restituire l'oggetto is_meaningful con azione, lingua e motivazione; non omettere campi e non usare null. lingua deve indicare la lingua della risposta dell'utente appena ricevuta: usa esattamente "Italiano" se è in italiano, altrimenti indica la lingua rilevata, ad esempio "Inglese" o "Francese". Non dedurre la lingua dalla domanda, dal CV o dal profilo.
-Imposta is_meaningful.azione="blocca" se lingua non è "Italiano" oppure se il candidato usa volgarità o rivolge insulti offensivi a qualcuno. In entrambi i casi chiudi subito il colloquio. Per ogni altro caso imposta is_meaningful.azione="prosegui": non bloccare per risposte errate, vaghe, incomplete, non pertinenti, per lacune tecniche o perché il profilo non è allineato alla posizione.
+is_meaningful può essere null esclusivamente al turno 0, perché non è ancora stata ricevuta una risposta del candidato. Da turn_id 1 in poi è obbligatorio restituire l'oggetto is_meaningful con azione e motivazione; non omettere campi e non usare null.
+Imposta is_meaningful.azione="blocca" se il candidato usa volgarità o rivolge insulti offensivi a qualcuno. In entrambi i casi chiudi subito il colloquio. Per ogni altro caso imposta is_meaningful.azione="prosegui": non bloccare per risposte errate, vaghe, incomplete, non pertinenti, per lacune tecniche o perché il profilo non è allineato alla posizione.
 Considera il contesto: non bloccare per termini tecnici, citazioni o riferimenti neutrali a parole offensive, né per critiche professionali non volgari.
 Per la conclusione normale, is_final=true esclusivamente al turno {final_turn_id}. Non impostare is_final=true a causa della qualità o pertinenza di una risposta.
 
@@ -133,12 +133,12 @@ logger = logging.getLogger(__name__)
 
 
 def _is_blocked(turn: HireReadyTurn) -> bool:
-    """True se il turno chiude per contenuto inappropriato o lingua non italiana."""
+    """True se il turno chiude per contenuto inappropriato"""
     return (
         turn.is_meaningful is not None
         and (
             turn.is_meaningful.azione == "blocca"
-            or turn.is_meaningful.lingua.strip().casefold() != "italiano"
+            
         )
     )
 
@@ -160,7 +160,6 @@ def _ensure_meaningful_classification(
         payload = dict(payload)
         payload["is_meaningful"] = {
             "azione": "prosegui",
-            "lingua": "non determinata",
             "motivazione": (
                 "Lingua della risposta non determinata."
             ),
@@ -268,8 +267,6 @@ class GemmaInterview:
                     last_turn.is_meaningful is not None
                     and (
                         last_turn.is_meaningful.azione == "blocca"
-                        or last_turn.is_meaningful.lingua.strip().casefold()
-                        != "italiano"
                     )
                 )
             ),
@@ -658,7 +655,7 @@ class GemmaInterview:
     def _force_close_turn(turn: HireReadyTurn) -> HireReadyTurn:
         """Sostituisce il turno con un messaggio di chiusura controllato."""
         meaningful = turn.is_meaningful
-        if meaningful is not None and meaningful.lingua.strip().casefold() != "italiano":
+        if meaningful is not None:
             meaningful = meaningful.model_copy(
                 update={
                     "azione": "blocca",

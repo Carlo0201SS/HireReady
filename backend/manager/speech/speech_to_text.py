@@ -16,10 +16,11 @@ class STTManager:
 
     def __init__(
         self,
-        model_size: str = "small",
+        model_size: str = "medium",
         device: str = "cpu",
         compute_type: str = "int8",
         cpu_threads: int = 4,
+        initial_prompt: Optional[str] = None,
     ):
         """
         Inizializza il motore STT.
@@ -36,6 +37,11 @@ class STTManager:
         self.cpu_threads = cpu_threads
         self._model = None
         self._ready = threading.Event()
+        self.initial_prompt = initial_prompt
+
+    def get_prompt(self) -> Optional[str]:
+        """Restituisce il prompt personalizzato attualmente impostato."""
+        return self.initial_prompt
 
     def warm_up(self) -> None:
         """
@@ -62,7 +68,7 @@ class STTManager:
         self,
         audio_bytes: bytes,
         language: Optional[str] = None,
-        beam_size: int = 5,
+        beam_size: int = 6,
         vad_filter: bool = True,
     ) -> dict:
         """
@@ -81,13 +87,22 @@ class STTManager:
             raise RuntimeError("Modello STT non ancora pronto. Chiamare warm_up() prima.")
 
         audio_file = io.BytesIO(audio_bytes)
+        
+
+        transcribe_kwargs = {
+            "language": language,
+            "beam_size": beam_size,
+            "vad_filter": vad_filter,
+        }
+
+         # Aggiungi initial_prompt solo se è impostato
+        if self.initial_prompt:
+            transcribe_kwargs["initial_prompt"] = self.initial_prompt
+
         segments, info = self._model.transcribe(
             audio_file,
-            language=language,
-            beam_size=beam_size,
-            vad_filter=vad_filter,
+            **transcribe_kwargs
         )
-
         # I segmenti sono un generatore: li materializziamo
         segment_list = []
         text_parts = []

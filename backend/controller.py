@@ -280,7 +280,7 @@ def warm_up_stt() -> None:
 
 
 def stt_state() -> str:
-	return _stt_manager().state
+	return _stt_manager()._ready
 
 
 def is_stt_available() -> bool:

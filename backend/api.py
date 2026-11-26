@@ -217,7 +217,6 @@ def interview_report_pdf(request: InterviewReportResponse) -> Response:
 def stt_status_endpoint() -> dict[str, object]:
 	return {
 		"available": is_stt_available(),
-		"state": stt_state(),
 	}
 
 
@@ -233,7 +232,7 @@ async def stt_transcribe(
 		audio_bytes = await audio.read()
 		if not audio_bytes:
 			raise HTTPException(status_code=400, detail="Il file audio è vuoto.")
-		result = transcribe_audio(audio_bytes, language=language)
+		result = transcribe_audio(audio_bytes=audio_bytes, language=language)
 	except HTTPException:
 		raise
 	except Exception as error:
