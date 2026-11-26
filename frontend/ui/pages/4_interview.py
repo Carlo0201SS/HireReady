@@ -220,7 +220,8 @@ with col_avatar:
     )
 
 with col_llm:
-    messaggio = html.escape(api_client.turn_message(current_turn))
+    # <br> al posto degli a capo: una riga vuota spezzerebbe il blocco HTML
+    messaggio = html.escape(api_client.turn_message(current_turn)).replace("\n", "<br>")
     st.markdown(f'<div class="llm-box">{messaggio}</div>', unsafe_allow_html=True)
 
 

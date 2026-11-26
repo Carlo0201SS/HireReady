@@ -33,12 +33,21 @@ st.markdown(
 	.answer-score {
 		display: inline-block; border-radius: 20px; padding: 4px 12px;
 		background: #e8f1fb; color: #1f3a5f; font-weight: 700;
+		font-size: 0.85rem; margin-left: 8px; vertical-align: middle;
 	}
+	/* Colore del voto: stessi toni dei badge della pagina Colloquio */
+	.answer-score--alto { background: #c8f7c5; color: #1e5631; }
+	.answer-score--medio { background: #fff1c2; color: #7a5600; }
+	.answer-score--basso { background: #ffc9c9; color: #7a1f1f; }
+	.answer-card--alto { border-left: 5px solid #3aa856; }
+	.answer-card--medio { border-left: 5px solid #e0a800; }
+	.answer-card--basso { border-left: 5px solid #d64545; }
 	</style>
 	""",
 	unsafe_allow_html=True,
 )
 
+st.markdown('<div class="progress-fase">Passo 5 di 5</div>', unsafe_allow_html=True)
 st.markdown('<div class="report-title">Report del colloquio</div>', unsafe_allow_html=True)
 
 history = st.session_state.get("interview_history")
@@ -84,7 +93,8 @@ if report is None:
 			st.stop()
 	st.session_state["interview_report"] = report
 
-summary = html.escape(report.get("summary", "Riepilogo non disponibile."))
+# <br> al posto degli a capo: una riga vuota spezzerebbe il blocco HTML
+summary = html.escape(report.get("summary", "Riepilogo non disponibile.")).replace("\n", "<br>")
 average_score = report.get("score")
 if average_score is not None:
 	st.metric("Media complessiva", f"{average_score:.2f}/10")
@@ -110,6 +120,7 @@ if report_pdf is not None and report_pdf_filename is not None:
 		data=report_pdf,
 		file_name=st.session_state["interview_report_pdf_filename"],
 		mime="application/pdf",
+		type="primary",
 		use_container_width=True,
 	)
 
@@ -118,9 +129,9 @@ st.subheader("Punti di intervento")
 if not intervention_points:
 	st.info("Non sono emersi punti di intervento specifici dalle risposte.")
 for point in intervention_points:
-	area = html.escape(point.get("area", ""))
-	evidence = html.escape(point.get("evidence", ""))
-	recommendation = html.escape(point.get("recommendation", ""))
+	area = html.escape(point.get("area", "")).replace("\n", "<br>")
+	evidence = html.escape(point.get("evidence", "")).replace("\n", "<br>")
+	recommendation = html.escape(point.get("recommendation", "")).replace("\n", "<br>")
 	st.markdown(
 		f"""
 		<article class="answer-card">
@@ -144,23 +155,27 @@ for index, item in enumerate(answers, start=1):
 	if score is None:
 		score_label = "Voto non disponibile"
 		criticita = ""
+		fascia = ""
 	elif score <= 4:
 		score_label = f"{score}/10"
 		criticita = " · Risposta da approfondire"
+		fascia = "basso"
 	elif score <= 7:
 		score_label = f"{score}/10"
 		criticita = " · Risposta parzialmente efficace"
+		fascia = "medio"
 	else:
 		score_label = f"{score}/10"
 		criticita = " · Risposta solida"
-	question = html.escape(item.get("question", ""))
-	answer = html.escape(item.get("answer", ""))
-	motivation = html.escape(item.get("motivation", ""))
+		fascia = "alto"
+	question = html.escape(item.get("question", "")).replace("\n", "<br>")
+	answer = html.escape(item.get("answer", "")).replace("\n", "<br>")
+	motivation = html.escape(item.get("motivation", "")).replace("\n", "<br>")
 	st.markdown(
 		f"""
-		<article class="answer-card">
+		<article class="answer-card answer-card--{fascia}">
 			<h3>Risposta {index}
-				<span class="answer-score">{score_label}{criticita}</span>
+				<span class="answer-score answer-score--{fascia}">{score_label}{criticita}</span>
 			</h3>
 			<div class="answer-label">Domanda</div>
 			<div>{question}</div>
