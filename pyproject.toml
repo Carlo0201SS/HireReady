@@ -28,6 +28,12 @@ dependencies = [
     "uvicorn",
     # PDF report generation
     "reportlab>=4.2",
+    # Speech-to-text locale
+    "faster-whisper>=1.2.1",
+    # TEMPORANEO: faster-whisper 1.2.1 chiama av.open(..., metadata_errors=...),
+    # parametro rimosso in PyAV >= 14. Togliere il vincolo quando faster-whisper
+    # sarà compatibile con le versioni nuove di av.
+    "av<14",
 ]
 
 [project.optional-dependencies]

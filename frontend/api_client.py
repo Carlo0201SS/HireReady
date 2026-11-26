@@ -134,6 +134,7 @@ class HireReadyApiClient:
 		audio_bytes: bytes,
 		filename: str = "audio.wav",
 		language: str | None = None,
+		prompt: str | None = None,
 	) -> dict:
 		"""Chiama POST /api/stt/transcribe.
 
@@ -154,6 +155,8 @@ class HireReadyApiClient:
 		data = {}
 		if language:
 			data["language"] = language
+		if prompt:
+			data["prompt"] = prompt
 
 		return self._request(
 			"POST",
@@ -167,9 +170,15 @@ class HireReadyApiClient:
 		audio_bytes: bytes,
 		filename: str = "audio.wav",
 		language: str | None = None,
+		prompt: str | None = None,
 	) -> str:
 		"""Versione semplificata: restituisce solo il testo trascritto."""
-		result = self.transcribe_audio(audio_bytes, filename=filename, language=language)
+		result = self.transcribe_audio(
+			audio_bytes,
+			filename=filename,
+			language=language,
+			prompt=prompt,
+		)
 		return result["text"]
 
 	# ------------------------------------------------------------------

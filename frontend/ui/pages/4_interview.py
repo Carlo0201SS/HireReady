@@ -265,32 +265,34 @@ st.markdown('<div class="label-rispondi">La tua risposta</div>', unsafe_allow_ht
 
 chiave_input = f"input_risposta_{st.session_state.get('answer_counter', 0)}"
 
-# --- Stato del servizio STT (con cache breve per non chiamare l'API a ogni rerun) ---
-@st.cache_data(ttl=5, show_spinner=False)
-def _stt_disponibile() -> bool:
-    try:
-        return api_client.stt_available()
-    except HTTPException:
-        return False
+def _prompt_trascrizione() -> str:
+    """Contesto per Whisper: ruolo, competenze del CV e domanda corrente.
+    Aiuta a riconoscere i termini tecnici (React, TypeScript, API...)."""
+    profilo = context.get("profile") or {}
+    competenze = profilo.get("technical_skills") or [] if isinstance(profilo, dict) else []
+    domanda = ((current_turn or {}).get("next_question") or {}).get("text", "")
+    parti = [f"Colloquio di lavoro per {context.get('selected_position', '')}."]
+    if competenze:
+        parti.append("Termini tecnici: " + ", ".join(map(str, competenze[:25])) + ".")
+    if domanda:
+        parti.append(f"Domanda: {domanda}")
+    # Whisper usa al massimo ~224 token di prompt: teniamolo corto
+    return " ".join(parti)[:800]
 
-@st.fragment(run_every=2)  # si aggiorna ogni 2 secondi
-def area_risposta_con_stt(chiave_input: str):
-    # Ricontrolla lo stato a ogni aggiornamento del fragment
-    try:
-        stt_pronto = api_client.stt_available()
-    except HTTPException:
-        stt_pronto = False
 
-    if not stt_pronto:
-        st.info("Il servizio di trascrizione vocale si sta avviando…")
-        # Mostra comunque un widget disabilitato per mantenere la UI coerente
-        st.audio_input("Registra la tua risposta", key=f"voice_wait_{chiave_input}", disabled=True)
-        return 
-stt_pronto = api_client.stt_available()
+# --- Stato del servizio STT ---
+try:
+    stt_pronto = api_client.stt_available()
+except HTTPException:
+    stt_pronto = False
+
+if not stt_pronto:
+    st.caption("🎙️ La trascrizione vocale non è ancora pronta: puoi scrivere la risposta, oppure attendere qualche secondo e ricaricare.")
+
 # --- Registrazione vocale → trascrizione ---
 audio_registrato = st.audio_input(
     "Registra la tua risposta",
-    key=f"voice_{st.session_state.get('answer_counter', 0)}",
+    key=f"voice_{st.session_state.get('answer_counter', 0)}_{st.session_state.get('voice_reset', 0)}",
     disabled=not stt_pronto,
 )
 
@@ -304,6 +306,7 @@ if audio_registrato is not None:
                     audio_bytes,
                     filename="risposta.wav",
                     language="it",
+                    prompt=_prompt_trascrizione(),
                 )
             except HTTPException as error:
                 st.error(str(error.detail))
@@ -321,7 +324,22 @@ risposta_utente = st.text_area(
     key=chiave_input,
 )
 
-_, col_bottone = st.columns([5, 1])
+def _cancella_risposta(chiave: str) -> None:
+    # Svuota il testo e azzera il registratore: cambiando la sua key,
+    # Streamlit crea un widget nuovo e la registrazione precedente sparisce.
+    st.session_state[chiave] = ""
+    st.session_state.pop("last_transcribed_hash", None)
+    st.session_state["voice_reset"] = st.session_state.get("voice_reset", 0) + 1
+
+
+_, col_cancella, col_bottone = st.columns([4, 1, 1])
+with col_cancella:
+    st.button(
+        "Cancella",
+        use_container_width=True,
+        on_click=_cancella_risposta,
+        args=(chiave_input,),
+    )
 with col_bottone:
     invia = st.button("Invia risposta ➜", use_container_width=True, type="primary")
 

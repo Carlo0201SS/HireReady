@@ -1,10 +1,13 @@
 import io
+import logging
 import os
 import threading
 from pathlib import Path
 from typing import Optional
 
 from faster_whisper import WhisperModel
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -37,11 +40,6 @@ class STTManager:
         self.cpu_threads = cpu_threads
         self._model = None
         self._ready = threading.Event()
-        self.initial_prompt = initial_prompt
-
-    def get_prompt(self) -> Optional[str]:
-        """Restituisce il prompt personalizzato attualmente impostato."""
-        return self.initial_prompt
 
     def warm_up(self) -> None:
         """
@@ -50,14 +48,33 @@ class STTManager:
         """
         if self._model is not None:
             return
-        
-        self._model = WhisperModel(
-            self.model_size,
-            device=self.device,
-            compute_type=self.compute_type,
-            cpu_threads=self.cpu_threads,
-        )
+
+        try:
+            self._model = WhisperModel(
+                self.model_size,
+                device=self.device,
+                compute_type=self.compute_type,
+                cpu_threads=self.cpu_threads,
+            )
+        except Exception as error:
+            # Senza questo l'eccezione si perde nel thread di warm-up
+            # e la UI resta per sempre in "si sta avviando".
+            self._error = f"{type(error).__name__}: {error}"
+            logger.exception("Caricamento modello STT non riuscito.")
+            return
+        self._error = None
         self._ready.set()
+
+    @property
+    def state(self) -> str:
+        """'error', 'ready' oppure 'loading'."""
+        if self._error:
+            return "error"
+        return "ready" if self._ready.is_set() else "loading"
+
+    @property
+    def error(self) -> Optional[str]:
+        return self._error
 
     @property
     def is_ready(self) -> bool:
@@ -70,6 +87,7 @@ class STTManager:
         language: Optional[str] = None,
         beam_size: int = 6,
         vad_filter: bool = True,
+        initial_prompt: Optional[str] = None,
     ) -> dict:
         """
         Trascrive l'audio e restituisce il testo con metadati.
@@ -79,6 +97,8 @@ class STTManager:
             language: Codice lingua ('it', 'en', ...). None per auto-detect.
             beam_size: Ampiezza beam search (5 è un buon compromesso).
             vad_filter: Se True, rimuove i silenzi prima della trascrizione.
+            initial_prompt: Testo di contesto (ruolo, termini tecnici) che orienta
+                il vocabolario di Whisper. Non viene trascritto.
 
         Returns:
             Dict con 'text', 'language', 'language_probability', 'segments'.
@@ -101,7 +121,9 @@ class STTManager:
 
         segments, info = self._model.transcribe(
             audio_file,
-            **transcribe_kwargs
+            language=language,
+            beam_size=beam_size,
+            vad_filter=vad_filter,
         )
         # I segmenti sono un generatore: li materializziamo
         segment_list = []

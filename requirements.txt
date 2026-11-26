@@ -28,6 +28,6 @@ reportlab>=4.2
 weasyprint
 Jinja2
 
-speechrecognition
-assemblyai
-faster-whisper
+# Speech-to-text locale (vincolo av: vedi commento in pyproject.toml)
+faster-whisper>=1.2.1
+av<14

@@ -224,6 +224,7 @@ def stt_status_endpoint() -> dict[str, object]:
 async def stt_transcribe(
 	audio: UploadFile = File(...),
 	language: Optional[str] = Form(None),
+	prompt: Optional[str] = Form(None),
 ) -> TranscribeResponse:
 	if not is_stt_available():
 		raise HTTPException(status_code=503, detail="Modello STT non ancora pronto")
@@ -232,14 +233,22 @@ async def stt_transcribe(
 		audio_bytes = await audio.read()
 		if not audio_bytes:
 			raise HTTPException(status_code=400, detail="Il file audio è vuoto.")
+<<<<<<< HEAD
 		result = transcribe_audio(audio_bytes=audio_bytes, language=language)
+=======
+		result = transcribe_audio(
+			audio_bytes,
+			language=language,
+			initial_prompt=prompt,
+		)
+>>>>>>> 150cd18ec962634f207985a1c47e7ebdb17e3d13
 	except HTTPException:
 		raise
 	except Exception as error:
 		logger.exception("Trascrizione audio non riuscita.")
 		raise HTTPException(
 			status_code=500,
-			detail="Trascrizione audio non riuscita.",
+			detail=f"Trascrizione audio non riuscita: {type(error).__name__}: {error}",
 		) from error
 	finally:
 		await audio.close()
